@@ -1,11 +1,71 @@
-
-__pycache__/
-*.pyc
-.ipynb_checkpoints/
-.env
-.venv/
+# --- Python & Ambiente ---
+**/__pycache__/
+*.py[cod]
+*$py.class
+.Python
+build/
+develop-eggs/
 dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# --- Ambientes Virtuais & Variáveis ---
+.env
+.venv
+env/
+venv/
+ENV/
+.python-version
+
+# --- IDEs & Editores ---
+.vscode/
+.idea/
+.history/
+*.swp
+.DS_Store
+Thumbs.db
+
+# --- Logs & Testes ---
+*.log
+.pytest_cache/
+.coverage
+htmlcov/
+coverage.xml
+
+# --- Dados ---
+# Ignoramos TUDO dentro de data/ para evitar subir dados sensíveis dos alunos.
+data/*
+# Mantemos apenas o .gitkeep para que a pasta vazia exista no repositório
+!data/.gitkeep
+
+# --- Artefatos de Modelo (Adaptado para Scikit-learn/Joblib) ---
 *.pkl
 *.joblib
-data/
-!data/.gitkeep
+
+# ATENÇÃO: Se quiser entregar o modelo treinado para facilitar
+# a avaliação (desde que <100MB), descomente as linhas abaixo:
+# !app/model/*.pkl
+# !app/model/*.joblib
+
+# --- Monitoramento & Drift ---
+!app/model/baseline_stats.json
+
+# --- Jupyter Notebooks ---
+.ipynb_checkpoints
+# Opcional: Ignorar saídas de notebooks para manter o diff limpo
+# *.nbconvert.ipynb
+
+# --- Docker ---
+.docker/

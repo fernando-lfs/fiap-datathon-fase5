@@ -1,0 +1,37 @@
+[tool.poetry]
+name = "passos-magicos-datathon"
+version = "0.1.0"
+description = "Modelo preditivo de risco de defasagem escolar para a Associação Passos Mágicos."
+authors = ["fernando-lfs <fernando.l.f@outlook.com>"]
+readme = "README.md"
+package-mode = false
+
+[tool.poetry.dependencies]
+python = ">=3.11,<3.15"
+pandas = "^2.1.0"
+numpy = "^1.26.0"
+scikit-learn = "^1.3.0"
+fastapi = "^0.109.0"
+uvicorn = "^0.27.0"
+joblib = "^1.3.0"
+python-multipart = "^0.0.9"
+pydantic = "^2.0.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.0.0"
+pytest-cov = "^4.1.0"
+ipykernel = "^6.29.0"
+matplotlib = "^3.8.0"
+seaborn = "^0.13.0"
+black = "^24.0.0"
+isort = "^5.13.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.pytest.ini_options]
+pythonpath = [
+    ".", "src", "app"
+]
+addopts = "--cov=src --cov=app --cov-report=term-missing"
