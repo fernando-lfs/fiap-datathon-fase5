@@ -2,46 +2,52 @@ import pandas as pd
 import joblib
 from fastapi import FastAPI, HTTPException
 from pathlib import Path
+from contextlib import asynccontextmanager
 from app.schemas import AlunoInput, PredicaoOutput
 
 # Configuração de Caminhos
 BASE_DIR = Path(__file__).resolve().parent
 MODEL_PATH = BASE_DIR / "model" / "pipeline.joblib"
 
+# Variável global para o modelo
+model = None
+
+
+# Nova lógica de ciclo de vida (Lifespan)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Carregar modelo ao iniciar
+    global model
+    if MODEL_PATH.exists():
+        model = joblib.load(MODEL_PATH)
+        print("Modelo carregado com sucesso!")
+    else:
+        print(f"AVISO: Modelo não encontrado em {MODEL_PATH}")
+    yield
+    # Código para executar ao desligar (se necessário)
+    model = None
+
+
 app = FastAPI(
     title="API Passos Mágicos - Previsão de Risco",
     description="API para prever risco de defasagem escolar com base em indicadores pedagógicos.",
     version="1.0.0",
+    lifespan=lifespan,
 )
-
-# Carregamento do Modelo Global
-model = None
-
-
-@app.on_event("startup")
-def load_model():
-    global model
-    if not MODEL_PATH.exists():
-        raise FileNotFoundError(f"Modelo não encontrado em {MODEL_PATH}")
-    model = joblib.load(MODEL_PATH)
-    print("Modelo carregado com sucesso!")
 
 
 def preprocess_input(data: AlunoInput) -> pd.DataFrame:
     """
     Transforma o input Pydantic em DataFrame compatível com o modelo.
-    Aplica as mesmas transformações manuais do feature_engineering.
     """
-    # 1. Converter para Dict
-    input_dict = data.dict()
+    input_dict = data.model_dump()  # model_dump() é o novo dict() no Pydantic V2
 
-    # Ajuste de nome de coluna (n_av -> nº_av) se necessário pelo modelo
-    # No feature_engineering, a coluna era 'nº_av'. O Pydantic não aceita caracteres especiais facilmente.
+    # Ajuste de nome de coluna
     input_dict["nº_av"] = input_dict.pop("n_av")
 
     df = pd.DataFrame([input_dict])
 
-    # 2. Mapeamento de Pedras (Lógica replicada de feature_engineering)
+    # Mapeamento de Pedras
     pedra_map = {
         "quartzo": 1,
         "ágata": 2,
@@ -57,7 +63,7 @@ def preprocess_input(data: AlunoInput) -> pd.DataFrame:
                 df[col].astype(str).str.lower().map(pedra_map).fillna(0).astype(int)
             )
 
-    # 3. Binarização (Sim/Não)
+    # Binarização
     binary_map = {"sim": 1, "não": 0, "nao": 0, "s": 1, "n": 0}
     cols_binary = ["indicado", "atingiu_pv"]
     for col in cols_binary:
@@ -75,14 +81,11 @@ def predict(aluno: AlunoInput):
         raise HTTPException(status_code=500, detail="Modelo não carregado.")
 
     try:
-        # Pré-processamento
         df_input = preprocess_input(aluno)
 
-        # Predição
         prediction = model.predict(df_input)[0]
-        proba = model.predict_proba(df_input)[0][1]  # Probabilidade da classe 1 (Risco)
+        proba = model.predict_proba(df_input)[0][1]
 
-        # Resposta
         risco = bool(prediction == 1)
         mensagem = (
             "ALERTA: Alto risco de defasagem. Intervenção recomendada."

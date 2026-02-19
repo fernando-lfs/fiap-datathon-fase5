@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from typing import Optional
 
 
@@ -21,8 +21,9 @@ class AlunoInput(BaseModel):
     atingiu_pv: str
     ipv: float
 
-    class Config:
-        json_schema_extra = {
+    # Nova sintaxe do Pydantic V2
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "genero": "Menina",
                 "ano_ingresso": 2018,
@@ -43,6 +44,7 @@ class AlunoInput(BaseModel):
                 "ipv": 7.2,
             }
         }
+    )
 
 
 class PredicaoOutput(BaseModel):
