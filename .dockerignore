@@ -1,0 +1,45 @@
+# Git
+.git
+.gitignore
+
+# Python Cache & Ambientes Virtuais
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+.venv
+env/
+venv/
+
+# Dados e Notebooks
+# O modelo já está serializado em app/model. Não precisamos dos CSVs ou notebooks na imagem de produção.
+data/
+notebooks/
+
+# Testes e Qualidade de Código
+# Testes rodam no CI/CD antes do build, não precisam estar na imagem final.
+tests/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDE & Configurações Locais
+.vscode/
+.idea/
+*.swp
+
+# Documentação e Arquivos de Suporte
+README.md
+requisitos.md
+dicionario_dados.md
+PEDE_Pontos_Importantes.md
+setup_project.py
+
+# Arquivos de Gerenciamento de Dependências (já usamos o requirements.txt gerado)
+pyproject.toml
+poetry.lock
+
+# Docker
+Dockerfile
+.dockerignore
