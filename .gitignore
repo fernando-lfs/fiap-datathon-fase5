@@ -45,10 +45,13 @@ htmlcov/
 coverage.xml
 
 # --- Dados ---
-# Ignoramos TUDO dentro de data/ para evitar subir dados sensíveis dos alunos.
+# Ignorar todos os dados...
 data/*
-# Mantemos apenas o .gitkeep para que a pasta vazia exista no repositório
-!data/.gitkeep
+# ...Exceto a pasta raw e o dataset original (para reprodutibilidade da avaliação)
+!data/raw/
+!data/raw/dataset_pede_passos.csv
+# Garantir que dados processados/temporários continuem ignorados
+data/processed/
 
 # --- Artefatos de Modelo (Adaptado para Scikit-learn/Joblib) ---
 *.pkl
