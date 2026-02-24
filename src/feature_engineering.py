@@ -1,7 +1,9 @@
 import pandas as pd
-import numpy as np
 from pathlib import Path
 from sklearn.model_selection import train_test_split
+from src.utils import setup_logger
+
+logger = setup_logger("feature_engineering")
 
 
 def get_project_root() -> Path:
@@ -14,43 +16,11 @@ def load_processed_data(filepath: Path) -> pd.DataFrame:
     return pd.read_csv(filepath)
 
 
-def map_pedras(df: pd.DataFrame) -> pd.DataFrame:
-    pedra_map = {
-        "quartzo": 1,
-        "ágata": 2,
-        "agata": 2,
-        "ametista": 3,
-        "topázio": 4,
-        "topazio": 4,
-    }
-    cols_pedra = [c for c in df.columns if "pedra" in c]
-    for col in cols_pedra:
-        df[col] = df[col].astype(str).str.lower().map(pedra_map).fillna(0).astype(int)
-    return df
-
-
-def clean_binary_features(df: pd.DataFrame) -> pd.DataFrame:
-    binary_map = {"sim": 1, "não": 0, "nao": 0, "s": 1, "n": 0}
-    target_cols = ["indicado_bolsa", "ponto_virada", "atingiu_pv", "indicado"]
-    for col in df.columns:
-        if any(x in col for x in target_cols):
-            if df[col].dtype == "object":
-                df[col] = (
-                    df[col]
-                    .astype(str)
-                    .str.lower()
-                    .map(binary_map)
-                    .fillna(0)
-                    .astype(int)
-                )
-    return df
-
-
 def select_features(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Seleção rigorosa de features para evitar Data Leakage.
-    Removemos qualquer variável que participe da fórmula matemática da Defasagem.
+    Remove colunas que causam Data Leakage ou não são úteis para predição.
     """
+    # Colunas de identificação e vazamento direto da fórmula de defasagem
     drop_cols = [
         "nome",
         "ra",
@@ -60,46 +30,47 @@ def select_features(df: pd.DataFrame) -> pd.DataFrame:
         "cf",
         "ct",
         "turma",
-        # VAZAMENTO DIRETO (Fórmula da Defasagem):
         "ian",
         "ian_22",
         "fase",
         "fase_22",
         "idade_22",
         "ano_nasc",
-        # VAZAMENTO INDIRETO (Composição do INDE inclui IAN):
         "inde_22",
         "inde_21",
-        "inde_20",
+        "inde_20",  # INDE contém a resposta
     ]
 
-    # Remove colunas de texto livre
+    # Colunas de texto livre (NLP seria necessário, fora do escopo baseline)
     drop_cols += [
         c for c in df.columns if "rec_" in c or "destaque_" in c or "avaliador" in c
     ]
 
     # Remove apenas o que existe no DF
-    drop_cols = [c for c in drop_cols if c in df.columns]
+    cols_to_drop = [c for c in drop_cols if c in df.columns]
+    df = df.drop(columns=cols_to_drop)
 
-    df = df.drop(columns=drop_cols)
+    logger.info(f"Colunas removidas para evitar Leakage/Ruído: {len(cols_to_drop)}")
     return df
 
 
 def run_feature_engineering(input_path: Path):
-    print("Iniciando Feature Engineering (Correção Radical de Leakage)...")
+    logger.info("Iniciando Feature Engineering...")
     df = load_processed_data(input_path)
 
-    df = map_pedras(df)
-    df = clean_binary_features(df)
+    # Nota: Não fazemos mais map_pedras ou clean_binary aqui.
+    # Isso será feito pelo Pipeline dentro do modelo.
+
     df = select_features(df)
 
     if "alvo" not in df.columns:
+        logger.error("Coluna 'alvo' não encontrada no dataset.")
         raise ValueError("Coluna 'alvo' não encontrada.")
 
     X = df.drop(columns=["alvo"])
     y = df["alvo"]
 
-    # Stratify é crucial
+    # Stratify é crucial para classes desbalanceadas
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=0.2, random_state=42, stratify=y
     )
@@ -110,17 +81,11 @@ def run_feature_engineering(input_path: Path):
     y_train.to_csv(output_dir / "y_train.csv", index=False)
     y_test.to_csv(output_dir / "y_test.csv", index=False)
 
-    print(f"Feature Engineering concluído.")
-    print(f"Treino: {X_train.shape}, Teste: {X_test.shape}")
+    logger.info(f"Split concluído. Treino: {X_train.shape}, Teste: {X_test.shape}")
     return X_train.columns.tolist()
 
 
 if __name__ == "__main__":
     root = get_project_root()
     input_file = root / "data" / "processed" / "dataset_limpo.csv"
-    try:
-        cols = run_feature_engineering(input_file)
-        print("\nFeatures Selecionadas (Comportamentais):")
-        print(cols)
-    except Exception as e:
-        print(f"Erro: {e}")
+    run_feature_engineering(input_file)

@@ -6,6 +6,10 @@ from sklearn.compose import ColumnTransformer
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from sklearn.impute import SimpleImputer
 from sklearn.linear_model import LogisticRegression
+from src.utils import setup_logger
+from src.transformers import PedraMapper, BinaryCleaner
+
+logger = setup_logger("train")
 
 
 def get_project_root() -> Path:
@@ -15,24 +19,26 @@ def get_project_root() -> Path:
 def load_train_data(data_dir: Path):
     X_train = pd.read_csv(data_dir / "X_train.csv")
     y_train = pd.read_csv(data_dir / "y_train.csv")
-    # Garante que y é um array 1D
     return X_train, y_train.values.ravel()
 
 
 def create_pipeline(X_train: pd.DataFrame) -> Pipeline:
     """
-    Cria o pipeline de pré-processamento e modelo.
+    Cria o pipeline completo incluindo pré-processamento customizado.
     """
-    # 1. Identificação de colunas
+    # 1. Definição de Colunas
+    # Colunas que sabemos que são categóricas e precisam de OneHot
     categorical_features = ["genero", "instituicao_de_ensino"]
 
-    # Todas as outras são numéricas
-    numerical_features = [
-        col for col in X_train.columns if col not in categorical_features
-    ]
+    # Colunas de Pedras e Binárias são tratadas pelos Transformers Customizados
+    # O restante é numérico
+    cols_pedra = ["pedra_20", "pedra_21", "pedra_22"]
+    cols_binary = ["indicado", "atingiu_pv", "indicado_bolsa", "ponto_virada"]
 
-    # 2. Transformadores
-    # Para numéricos: Imputer (preenche nulos com média) + Scaler (normaliza escala)
+    exclude_cols = categorical_features + cols_pedra + cols_binary
+    numerical_features = [c for c in X_train.columns if c not in exclude_cols]
+
+    # 2. Pipeline de Transformação Numérica
     numeric_transformer = Pipeline(
         steps=[
             ("imputer", SimpleImputer(strategy="median")),
@@ -40,7 +46,7 @@ def create_pipeline(X_train: pd.DataFrame) -> Pipeline:
         ]
     )
 
-    # Para categóricos: OneHotEncoder (transforma texto em colunas binárias)
+    # 3. Pipeline de Transformação Categórica
     categorical_transformer = Pipeline(
         steps=[
             ("imputer", SimpleImputer(strategy="constant", fill_value="missing")),
@@ -48,18 +54,25 @@ def create_pipeline(X_train: pd.DataFrame) -> Pipeline:
         ]
     )
 
-    # 3. Montagem do Preprocessor
+    # 4. ColumnTransformer
+    # Aplica transformações específicas em colunas específicas
     preprocessor = ColumnTransformer(
         transformers=[
             ("num", numeric_transformer, numerical_features),
             ("cat", categorical_transformer, categorical_features),
-        ]
+            # As colunas de pedra e binárias passam "passthrough" aqui
+            # pois serão tratadas pelos Custom Transformers no início do pipeline principal
+            # ou podemos aplicar o scaler nelas se quisermos, mas vamos manter simples.
+        ],
+        remainder="passthrough",  # Mantém as colunas que já foram tratadas pelos custom transformers
     )
 
-    # 4. Pipeline Final com Modelo Baseline (Regressão Logística)
-    # class_weight='balanced' é CRUCIAL pois temos muito mais alunos em risco (1) do que fora (0)
-    model = Pipeline(
+    # 5. Pipeline Principal
+    # A ordem é: Limpa Pedras -> Limpa Binários -> Preprocessa (Scale/OneHot) -> Modelo
+    model_pipeline = Pipeline(
         steps=[
+            ("pedra_mapper", PedraMapper()),
+            ("binary_cleaner", BinaryCleaner()),
             ("preprocessor", preprocessor),
             (
                 "classifier",
@@ -70,7 +83,7 @@ def create_pipeline(X_train: pd.DataFrame) -> Pipeline:
         ]
     )
 
-    return model
+    return model_pipeline
 
 
 def run_training():
@@ -78,25 +91,24 @@ def run_training():
     data_dir = root / "data" / "processed"
     model_dir = root / "app" / "model"
 
-    print("Carregando dados de treino...")
+    logger.info("Carregando dados de treino...")
     X_train, y_train = load_train_data(data_dir)
 
-    print("Construindo pipeline...")
+    logger.info("Construindo pipeline...")
     pipeline = create_pipeline(X_train)
 
-    print("Treinando modelo Baseline (Logistic Regression)...")
+    logger.info("Treinando modelo Baseline (Logistic Regression)...")
     pipeline.fit(X_train, y_train)
 
-    # Salvar modelo
     model_dir.mkdir(parents=True, exist_ok=True)
     model_path = model_dir / "pipeline.joblib"
     joblib.dump(pipeline, model_path)
 
-    print(f"Modelo treinado e salvo em: {model_path}")
+    logger.info(f"Modelo treinado e salvo em: {model_path}")
 
 
 if __name__ == "__main__":
     try:
         run_training()
     except Exception as e:
-        print(f"Erro no treinamento: {e}")
+        logger.critical(f"Erro no treinamento: {e}")
