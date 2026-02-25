@@ -2,50 +2,46 @@ import pandas as pd
 import joblib
 import logging
 from fastapi import FastAPI, HTTPException
-from pathlib import Path
 from contextlib import asynccontextmanager
 from app.schemas import AlunoInput, PredicaoOutput
-
-# Import necessário para o joblib carregar o pipeline
-from src.transformers import PedraMapper, BinaryCleaner
+from app.config import settings  # <--- IMPORTAÇÃO NOVA
 from src.utils import setup_logger
 
-# Configuração de Caminhos
-BASE_DIR = Path(__file__).resolve().parent
-MODEL_PATH = BASE_DIR / "model" / "pipeline.joblib"
-
 # Logger da Aplicação
-app_logger = setup_logger("api", "api.log")
+app_logger = setup_logger("api", "api.log", level=settings.LOG_LEVEL)
 
-# Logger para Monitoramento de Drift (Salva inputs e outputs)
+# Logger para Monitoramento de Drift
 drift_logger = logging.getLogger("drift_monitor")
 drift_logger.setLevel(logging.INFO)
-drift_handler = logging.FileHandler("logs/drift_data.csv")
+# Garante que a pasta logs existe
+log_dir = settings.BASE_DIR / "logs"
+log_dir.mkdir(exist_ok=True)
+drift_handler = logging.FileHandler(log_dir / "drift_data.csv")
 drift_handler.setFormatter(logging.Formatter("%(asctime)s,%(message)s"))
 drift_logger.addHandler(drift_handler)
 
-# Variável global para o modelo
 model = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global model
-    if MODEL_PATH.exists():
+    # Usa o caminho definido nas configurações
+    if settings.MODEL_PATH.exists():
         try:
-            model = joblib.load(MODEL_PATH)
-            app_logger.info("Modelo carregado com sucesso!")
+            model = joblib.load(settings.MODEL_PATH)
+            app_logger.info(f"Modelo carregado de: {settings.MODEL_PATH}")
         except Exception as e:
             app_logger.critical(f"Falha ao carregar modelo: {e}")
     else:
-        app_logger.warning(f"Modelo não encontrado em {MODEL_PATH}")
+        app_logger.warning(f"Modelo não encontrado em {settings.MODEL_PATH}")
     yield
     model = None
 
 
 app = FastAPI(
-    title="API Passos Mágicos - Previsão de Risco",
-    version="1.0.0",
+    title=settings.PROJECT_NAME,
+    version=settings.VERSION,
     lifespan=lifespan,
 )
 
