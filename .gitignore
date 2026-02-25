@@ -39,6 +39,7 @@ Thumbs.db
 
 # --- Logs & Testes ---
 *.log
+logs/
 .pytest_cache/
 .coverage
 htmlcov/
@@ -50,25 +51,24 @@ data/*
 # ...Exceto a pasta raw e o dataset original (para reprodutibilidade da avaliação)
 !data/raw/
 !data/raw/dataset_pede_passos.csv
-# Garantir que dados processados/temporários continuem ignorados
-data/processed/
+# Mantemos a estrutura de pastas, mas ignoramos o conteúdo processado
+!data/processed/.gitkeep
 
 # --- Artefatos de Modelo (Adaptado para Scikit-learn/Joblib) ---
+# Modelo final versionado para que a API funcione sem necessidade de retreino imediato
 *.pkl
-*.joblib
-
-# ATENÇÃO: Se quiser entregar o modelo treinado para facilitar
-# a avaliação (desde que <100MB), descomente as linhas abaixo:
-# !app/model/*.pkl
-# !app/model/*.joblib
+# Permitir o pipeline treinado para facilitar a avaliação do Datathon
+!app/model/pipeline.joblib
 
 # --- Monitoramento & Drift ---
 !app/model/baseline_stats.json
 
 # --- Jupyter Notebooks ---
 .ipynb_checkpoints
-# Opcional: Ignorar saídas de notebooks para manter o diff limpo
-# *.nbconvert.ipynb
 
 # --- Docker ---
 .docker/
+
+# --- Poetry ---
+# O poetry.lock DEVE ser versionado para garantir reprodutibilidade
+!poetry.lock
