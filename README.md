@@ -1,94 +1,100 @@
-# Datathon: Passos Mágicos - Previsão de Risco de Defasagem Escolar
+# 🎓 Datathon: Passos Mágicos - Previsão de Risco Escolar
 
-## 1. Visão Geral do Projeto
-**Objetivo:** Desenvolver uma solução de Machine Learning capaz de identificar precocemente alunos da Associação Passos Mágicos com alto risco de defasagem escolar (queda de desempenho ou desengajamento), permitindo intervenções pedagógicas proativas.
+![Python](https://img.shields.io/badge/Python-3.11-blue?style=for-the-badge&logo=python)
+![Scikit-Learn](https://img.shields.io/badge/Scikit_Learn-1.5-F7931E?style=for-the-badge&logo=scikit-learn)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.110-009688?style=for-the-badge&logo=fastapi)
+![Docker](https://img.shields.io/badge/Docker-Container-2496ed?style=for-the-badge&logo=docker)
+![Pytest](https://img.shields.io/badge/Pytest-Testing-yellow?style=for-the-badge&logo=pytest)
 
-**Solução Proposta:** 
-Um modelo preditivo (Regressão Logística) treinado com dados históricos (2020-2022), focado em indicadores comportamentais e psicossociais, exposto via API REST (FastAPI) e empacotado em Docker para fácil distribuição.
+> **Pós Tech - Machine Learning Engineering | FIAP**
 
-**Impacto de Negócio:**
-O modelo prioriza a **Sensibilidade (Recall)**, garantindo que a maioria dos alunos em risco seja identificada (Recall de ~83% no baseline), minimizando o erro de deixar um aluno vulnerável sem assistência.
+Este projeto apresenta uma solução de **Machine Learning** desenvolvida para a **Associação Passos Mágicos**, visando identificar precocemente alunos com alto risco de defasagem escolar.
 
-**Stack Tecnológica:**
-*   **Linguagem:** Python 3.11
-*   **ML:** Scikit-learn, Pandas, Numpy
-*   **API:** FastAPI, Pydantic
-*   **Gerenciamento:** Poetry
-*   **Testes:** Pytest (Cobertura de testes unitários implementada)
-*   **Container:** Docker
+A arquitetura implementa um pipeline robusto de classificação, desde a engenharia de features focada em indicadores psicossociais até o deploy produtivo via **FastAPI**, garantindo intervenções pedagógicas proativas e baseadas em dados.
 
-## 2. Estrutura do Projeto
-```bash
-project-root/
-│
-├── app/                        # Aplicação API
-│   ├── main.py                 # Endpoint e ciclo de vida da API
-│   ├── schemas.py              # Validação de dados (Pydantic)
-│   └── model/                  # Pipeline treinado (.joblib)
-│
-├── src/                        # Pipeline de Machine Learning
-│   ├── preprocessing.py        # Limpeza e tratamento inicial
-│   ├── feature_engineering.py  # Seleção de features e prevenção de Leakage
-│   ├── train.py                # Treinamento do modelo
-│   ├── evaluate.py             # Avaliação de métricas de negócio
-│   └── utils.py                # Utilitários gerais
-│
-├── tests/                      # Testes Unitários
-├── data/                       # Dados (ignorados no git)
-├── Dockerfile                  # Receita da imagem Docker
-├── pyproject.toml              # Configuração do Poetry
-└── README.md                   # Esta documentação
-```
+---
 
-## 3. Instruções de Instalação e Deploy
+## 🚀 Funcionalidades e Diferenciais
+
+*   **Pipeline Anti-Leakage:** Estratégia rigorosa de engenharia de features que remove variáveis do ano corrente (2022) para evitar vazamento de dados, garantindo que o modelo aprenda apenas com o histórico (2020-2021).
+*   **Monitoramento de Drift:** Implementação de logs dedicados (`drift_data.csv`) na API para monitorar as entradas em produção, facilitando a detecção de mudanças no perfil dos alunos.
+*   **API Performática:** Endpoint de inferência construído com **FastAPI**, utilizando validação estrita de tipos via **Pydantic** para garantir a integridade dos dados de entrada.
+*   **Qualidade de Código:** Suíte de testes unitários e de integração (`pytest`) cobrindo desde a limpeza de dados até a resposta da API.
+*   **Containerização Segura:** Dockerfile otimizado utilizando usuário não-root (`appuser`) e imagem base `slim`, seguindo as melhores práticas de segurança em MLOps.
+*   **Reprodutibilidade:** Gerenciamento de dependências via **Poetry** e serialização do pipeline completo (incluindo pré-processamento) com `joblib`.
+
+---
+
+## 🏗️ Arquitetura e Decisões Técnicas (ADR)
+
+| Componente | Escolha Técnica | Justificativa (Why?) |
+| :--- | :--- | :--- |
+| **Modelo Baseline** | **Regressão Logística** | Escolha mandatória para estabelecimento de baseline. Oferece alta interpretabilidade dos pesos das features (ex: impacto do `IEG` no risco) e eficiência computacional. |
+| **Métrica Principal** | **Recall (Sensibilidade)** | No contexto social, o custo de um Falso Negativo (não identificar um aluno em risco) é crítico. Priorizamos cobrir a maioria dos casos vulneráveis (~83% de Recall). |
+| **Pipeline** | **Scikit-Learn Pipeline** | Garante que o pré-processamento (imputação, scaling, one-hot encoding) aplicado no treino seja idêntico na inferência, eliminando erros de transformação. |
+| **API** | **FastAPI** | Performance assíncrona e geração automática de documentação (Swagger UI), essencial para consumo por outros sistemas da ONG. |
+| **Feature Eng.** | **Transformers Customizados** | Criação de classes como `PedraMapper` para tratar a ordinalidade das classificações (Quartzo < Ágata < Ametista < Topázio) sem perder a hierarquia. |
+
+---
+
+## ⚡ Guia de Instalação e Execução
 
 ### Pré-requisitos
-*   Docker instalado
-*   Git
+*   **Docker** (Recomendado para execução isolada).
+*   **Python 3.11+** e **Poetry** (Para desenvolvimento local).
 
-### Executando com Docker (Recomendado)
-A solução é agnóstica ao ambiente. Para rodar:
+### 1. Clonar o Repositório
+```bash
+git clone <url-do-repositorio>
+cd passos-magicos-datathon
+```
 
-1.  **Clone o repositório:**
-    ```bash
-    git clone <seu-repo-url>
-    cd passos-magicos-datathon
-    ```
+### 2. Configuração do Ambiente
 
-2.  **Construa a imagem:**
-    ```bash
-    docker build -t passos-magicos-api .
-    ```
+#### Opção A: Via Docker (Recomendado)
+A solução é agnóstica ao ambiente. Para rodar a API containerizada:
 
-3.  **Execute o container:**
-    ```bash
-    docker run -p 8000:8000 passos-magicos-api
-    ```
+```bash
+# 1. Construir a Imagem
+docker build -t passos-magicos-api .
 
-A API estará disponível em: `http://localhost:8000/docs`
+# 2. Rodar o Container
+docker run -p 8000:8000 passos-magicos-api
+```
+*Acesse a documentação interativa em:* [http://localhost:8000/docs](http://localhost:8000/docs)
 
-### Executando Localmente (Desenvolvimento)
-1.  Instale o Poetry: `pip install poetry`
-2.  Instale as dependências: `poetry install`
-3.  Ative o ambiente: `poetry shell`
-4.  Execute a API: `uvicorn app.main:app --reload`
+#### Opção B: Execução Local (Desenvolvimento)
+Para rodar o pipeline e a API diretamente na máquina:
 
-## 4. Pipeline de Machine Learning
+```bash
+# 1. Instalar dependências
+poetry install
 
-O pipeline foi desenhado para evitar **Data Leakage** e focar em causalidade:
+# 2. Ativar ambiente virtual
+poetry shell
 
-1.  **Pré-processamento:** Limpeza de nomes de colunas, conversão de tipos numéricos (tratamento de vírgula decimal PT-BR).
-2.  **Feature Engineering:**
-    *   Remoção de variáveis que compõem matematicamente o alvo (ex: `IAN`, `Fase Ideal`) para evitar vazamento.
-    *   Mapeamento ordinal de Pedras (Quartzo=1 a Topázio=4).
-    *   Seleção de features comportamentais (`IEG`, `IPS`, `IAA`) e notas (`Matemática`, `Português`).
-3.  **Modelo:** Pipeline com `SimpleImputer`, `StandardScaler`, `OneHotEncoder` e `LogisticRegression` (com `class_weight='balanced'` para lidar com o desbalanceamento).
+# 3. Executar API
+uvicorn app.main:app --reload
+```
 
-## 5. Exemplos de Uso da API
+---
 
-**Endpoint:** `POST /predict`
+## 🔌 Documentação da API
 
-**Exemplo de Request (JSON):**
+Abaixo, os endpoints disponíveis na aplicação.
+
+| Método | Endpoint | Descrição |
+| :--- | :--- | :--- |
+| `POST` | **/predict** | **Principal:** Recebe dados históricos do aluno e retorna a probabilidade de risco de defasagem. |
+| `GET` | **/health** | Health Check para monitoramento de disponibilidade da aplicação. |
+| `GET` | **/** | Redireciona para a documentação Swagger UI. |
+
+### Detalhamento do Endpoint de Predição
+
+#### Predição de Risco (`POST /predict`)
+Recebe indicadores acadêmicos e psicossociais dos anos anteriores para prever o risco no ano corrente.
+
+**Exemplo de Requisição (Body):**
 ```json
 {
   "genero": "Menina",
@@ -111,17 +117,59 @@ O pipeline foi desenhado para evitar **Data Leakage** e focar em causalidade:
 }
 ```
 
-**Exemplo de Response:**
+**Exemplo de Resposta (Sucesso):**
 ```json
 {
   "risco_defasagem": true,
   "probabilidade_risco": 0.7845,
-  "mensagem": "ALERTA: Alto risco de defasagem. Intervenção recomendada."
+  "mensagem": "ALERTA: Alto risco de defasagem. Intervenção pedagógica recomendada."
 }
 ```
 
-## 6. Defesa Técnica e Métricas
+---
 
-Optamos por priorizar o **Recall (Sensibilidade)** da classe positiva (Risco).
-*   **Justificativa:** No contexto social, o custo de um Falso Negativo (não identificar um aluno que precisa de ajuda) é muito maior do que um Falso Positivo (oferecer ajuda extra a quem não precisa).
-*   **Performance Atual:** O modelo atinge ~83% de Recall, garantindo alta cobertura dos alunos vulneráveis.
+## 📂 Estrutura do Projeto
+
+```text
+project-root/
+├── app/                        # Aplicação API
+│   ├── main.py                 # Endpoint e ciclo de vida da API
+│   ├── schemas.py              # Contratos de dados (Pydantic)
+│   └── model/                  # Pipeline serializado (.joblib)
+├── src/                        # Core de Machine Learning
+│   ├── preprocessing.py        # Limpeza e tratamento inicial
+│   ├── feature_engineering.py  # Seleção de features e prevenção de Leakage
+│   ├── train.py                # Treinamento do modelo
+│   ├── evaluate.py             # Avaliação de métricas
+│   ├── transformers.py         # Transformers customizados (PedraMapper, BinaryCleaner)
+│   └── utils.py                # Utilitários de Log
+├── tests/                      # Testes Unitários e de Integração
+├── data/                       # Dados (Raw e Processed - ignorados no git)
+├── logs/                       # Logs de aplicação e drift
+├── Dockerfile                  # Receita da imagem Docker
+├── pyproject.toml              # Configuração do Poetry
+└── README.md                   # Documentação do Projeto
+```
+
+---
+
+## 📈 Resultados Obtidos
+
+O modelo Baseline (Regressão Logística) foi otimizado para maximizar a detecção de alunos em situação de vulnerabilidade educacional.
+
+| Métrica | Valor Aprox. | Descrição |
+| :--- | :--- | :--- |
+| **Recall (Risco)** | **~83%** | Capacidade do modelo de identificar corretamente os alunos que realmente terão defasagem. |
+| **Precision** | **Variável** | Mantida em nível aceitável, equilibrando o número de falsos alertas. |
+
+> **Nota de Negócio:** O foco em Recall garante que a Associação Passos Mágicos atue preventivamente na maioria dos casos críticos, cumprindo sua missão social de não deixar nenhum aluno para trás.
+
+---
+
+## ☁️ Próximos Passos
+
+Para evolução do projeto visando maior escala e robustez:
+
+1.  **Experimentação de Modelos:** Testar algoritmos baseados em árvores (Random Forest, XGBoost) para capturar relações não-lineares complexas entre os indicadores psicossociais.
+2.  **Cloud Deployment:** Implantar a imagem Docker em serviços gerenciados (AWS ECS ou Google Cloud Run) para alta disponibilidade.
+3.  **Dashboard de Monitoramento:** Conectar os logs de drift (`drift_data.csv`) a uma ferramenta de visualização (Streamlit ou Grafana) para acompanhar a distribuição das notas e indicadores em tempo real.

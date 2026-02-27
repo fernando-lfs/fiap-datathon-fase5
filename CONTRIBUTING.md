@@ -36,9 +36,10 @@ Para manter a integridade da *branch* principal (`main`), siga este fluxo:
 Este projeto utiliza **Poetry** como fonte da verdade.
 
 1.  Para adicionar uma lib: `poetry add <nome-da-lib>`.
-2.  **Nunca edite o `requirements.txt` manualmente.** Ele é um artefato gerado para o Docker.
-3.  Se você alterou as dependências, **você deve atualizar o arquivo de requisitos**:
+2.  **Nunca edite o `requirements.txt` manualmente.** Ele é um artefato gerado exclusivamente para a construção da imagem Docker.
+3.  Se você alterou as dependências no `pyproject.toml`, **você deve atualizar o arquivo de requisitos**:
     ```bash
+    # Gera o requirements.txt compatível com pip
     poetry export --without-hashes --format=requirements.txt > requirements.txt
     ```
 
@@ -47,9 +48,9 @@ Este projeto utiliza **Poetry** como fonte da verdade.
 Se sua contribuição envolve alterações no modelo ou nos dados, atente-se rigorosamente a estes pontos:
 
 *   **Prevenção de Data Leakage (CRÍTICO):**
-    *   É estritamente **proibido** incluir features que componham matematicamente a variável alvo (Defasagem).
-    *   **Features Proibidas:** `IAN`, `INDE` (geral), `Fase Ideal`, `Ano Nascimento` (quando usado para calcular fase).
-    *   O modelo deve ser **comportamental** e não matemático.
+    *   É estritamente **proibido** incluir features que componham matematicamente a variável alvo (Defasagem) ou que pertençam ao futuro (ano corrente da predição).
+    *   **Features Proibidas:** `IAN`, `INDE` (geral), `Fase Ideal`, `Ano Nascimento` (quando usado para calcular fase), `Pedra` (do ano corrente).
+    *   O modelo deve ser **comportamental** e preditivo, não matemático.
 *   **Pipeline Scikit-Learn:**
     *   Qualquer transformação de dados (Imputer, Scaler, Encoder) deve estar dentro do `Pipeline` em `src/train.py`. Isso garante que o pré-processamento seja idêntico no treino e na inferência (API).
 *   **Reprodutibilidade:**
