@@ -46,21 +46,25 @@ htmlcov/
 coverage.xml
 
 # --- Dados ---
-# Ignorar todos os dados...
+# 1. Ignora tudo dentro de data por padrão (Segurança)
 data/*
-# ...Exceto a pasta raw e o dataset original (para reprodutibilidade da avaliação)
-!data/raw/
-!data/raw/dataset_pede_passos.csv
-# Mantemos a estrutura de pastas, mas ignoramos o conteúdo processado
+
+# 2. Exceções: Mantém a estrutura de pastas vazias
+!data/raw/.gitkeep
 !data/processed/.gitkeep
 
-# --- Artefatos de Modelo (Adaptado para Scikit-learn/Joblib) ---
-# Modelo final versionado para que a API funcione sem necessidade de retreino imediato
+# 3. Exceção Específica: Dataset Amostra (Necessário para avaliação do Datathon)
+!data/raw/dataset_pede_passos.csv
+
+# --- Artefatos de Modelo ---
+# Ignora binários gerais
 *.pkl
-# Permitir o pipeline treinado para facilitar a avaliação do Datathon
+*.joblib
+
+# Exceção: Permitir modelo treinado para garantir que a API funcione de imediato (Necessário para avaliação do Datathon)
 !app/model/pipeline.joblib
 
-# --- Monitoramento & Drift ---
+# --- Monitoramento ---
 !app/model/baseline_stats.json
 
 # --- Jupyter Notebooks ---
@@ -68,7 +72,3 @@ data/*
 
 # --- Docker ---
 .docker/
-
-# --- Poetry ---
-# O poetry.lock DEVE ser versionado para garantir reprodutibilidade
-!poetry.lock

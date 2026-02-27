@@ -1,11 +1,11 @@
 import pandas as pd
-import numpy as np
 from sklearn.base import BaseEstimator, TransformerMixin
 
 
 class PedraMapper(BaseEstimator, TransformerMixin):
     """
-    Transformer customizado para mapear as pedras (texto) para valores numéricos.
+    Transformer customizado para converter a variável ordinal 'Pedra' em valores numéricos.
+    Preserva a hierarquia: Quartzo (1) < Ágata (2) < Ametista (3) < Topázio (4).
     """
 
     def __init__(self):
@@ -17,7 +17,6 @@ class PedraMapper(BaseEstimator, TransformerMixin):
             "topázio": 4,
             "topazio": 4,
         }
-        # Colunas que sabemos que contêm pedras
         self.cols_pedra = ["pedra_20", "pedra_21", "pedra_22"]
 
     def fit(self, X, y=None):
@@ -27,7 +26,7 @@ class PedraMapper(BaseEstimator, TransformerMixin):
         X = X.copy()
         for col in self.cols_pedra:
             if col in X.columns:
-                # Converte para string, lower, mapeia e preenche nulos com 0
+                # Converte para string, lowercase, mapeia e preenche nulos com 0
                 X[col] = (
                     X[col]
                     .astype(str)
@@ -41,11 +40,13 @@ class PedraMapper(BaseEstimator, TransformerMixin):
 
 class BinaryCleaner(BaseEstimator, TransformerMixin):
     """
-    Transformer customizado para limpar colunas binárias (Sim/Não -> 1/0).
+    Transformer para padronização de variáveis booleanas textuais.
+    Converte: 'Sim', 'S' -> 1 e 'Não', 'N' -> 0.
     """
 
     def __init__(self):
         self.binary_map = {"sim": 1, "não": 0, "nao": 0, "s": 1, "n": 0}
+        # Keywords para identificar colunas binárias dinamicamente
         self.target_keywords = ["indicado", "ponto_virada", "atingiu_pv", "bolsa"]
 
     def fit(self, X, y=None):
@@ -56,8 +57,8 @@ class BinaryCleaner(BaseEstimator, TransformerMixin):
         for col in X.columns:
             # Verifica se a coluna contém alguma das palavras-chave
             if any(k in col for k in self.target_keywords):
-                # Aplica apenas se for objeto (string)
-                if X[col].dtype == "object":
+                # Aplica apenas se não for numérico (evita re-processar se já for int)
+                if not pd.api.types.is_numeric_dtype(X[col]):
                     X[col] = (
                         X[col]
                         .astype(str)

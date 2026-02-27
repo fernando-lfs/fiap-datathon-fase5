@@ -1,27 +1,28 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from typing import Optional
 
 
 class AlunoInput(BaseModel):
-    genero: str
-    ano_ingresso: int
-    instituicao_de_ensino: str
-    pedra_20: str
-    pedra_21: str
-    pedra_22: str
-    n_av: int
-    iaa: float
-    ieg: float
-    ips: float
-    ida: float
-    matem: float
-    portug: float
-    ingles: float
-    indicado: str
-    atingiu_pv: str
-    ipv: float
+    genero: str = Field(..., description="Gênero do aluno (ex: Menina, Menino)")
+    ano_ingresso: int = Field(..., description="Ano de ingresso na associação")
+    instituicao_de_ensino: str = Field(
+        ..., description="Tipo de instituição (ex: Escola Pública)"
+    )
+    pedra_20: str = Field(..., description="Classificação Pedra em 2020")
+    pedra_21: str = Field(..., description="Classificação Pedra em 2021")
+    pedra_22: str = Field(..., description="Classificação Pedra em 2022")
+    n_av: int = Field(..., description="Número de avaliações realizadas")
+    iaa: float = Field(..., description="Indicador de Auto Avaliação")
+    ieg: float = Field(..., description="Indicador de Engajamento")
+    ips: float = Field(..., description="Indicador Psicossocial")
+    ida: float = Field(..., description="Indicador de Aprendizagem")
+    matem: float = Field(..., description="Nota de Matemática")
+    portug: float = Field(..., description="Nota de Português")
+    ingles: float = Field(..., description="Nota de Inglês")
+    indicado: str = Field(..., description="Indicado para bolsa? (Sim/Não)")
+    atingiu_pv: str = Field(..., description="Atingiu Ponto de Virada? (Sim/Não)")
+    ipv: float = Field(..., description="Indicador de Ponto de Virada")
 
-    # Nova sintaxe do Pydantic V2
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
@@ -48,6 +49,8 @@ class AlunoInput(BaseModel):
 
 
 class PredicaoOutput(BaseModel):
-    risco_defasagem: bool
-    probabilidade_risco: float
-    mensagem: str
+    risco_defasagem: bool = Field(..., description="True se houver risco de defasagem")
+    probabilidade_risco: float = Field(
+        ..., description="Probabilidade calculada pelo modelo (0-1)"
+    )
+    mensagem: str = Field(..., description="Mensagem explicativa para o usuário")

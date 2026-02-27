@@ -13,7 +13,6 @@ env/
 venv/
 
 # Dados e Notebooks
-# O modelo já está serializado em app/model. Não precisamos dos CSVs ou notebooks na imagem de produção.
 data/
 notebooks/
 
@@ -22,7 +21,6 @@ logs/
 *.log
 
 # Testes e Qualidade de Código
-# Testes rodam no CI/CD antes do build, não precisam estar na imagem final.
 tests/
 .pytest_cache/
 .coverage
@@ -32,12 +30,14 @@ htmlcov/
 .vscode/
 .idea/
 *.swp
+.DS_Store
 
 # Documentação
 README.md
 *.pdf
+*.md
 
-# Arquivos de Gerenciamento de Dependências (já usamos o requirements.txt gerado)
+# Arquivos de Gerenciamento de Dependências (usamos o requirements.txt gerado)
 pyproject.toml
 poetry.lock
 

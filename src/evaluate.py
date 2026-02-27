@@ -4,8 +4,8 @@ from pathlib import Path
 from sklearn.metrics import classification_report, confusion_matrix
 from src.utils import setup_logger
 
-# Import necessário para o joblib reconhecer as classes customizadas ao carregar
-from src.transformers import PedraMapper, BinaryCleaner
+# Import necessário para o joblib reconhecer as classes customizadas
+from src.transformers import PedraMapper, BinaryCleaner  # noqa: F401
 
 logger = setup_logger("evaluate")
 
@@ -26,7 +26,7 @@ def evaluate_model():
     model_path = root / "app" / "model" / "pipeline.joblib"
 
     if not model_path.exists():
-        logger.error("Modelo não encontrado.")
+        logger.error("Modelo não encontrado. Execute o treinamento primeiro.")
         return
 
     logger.info("Carregando modelo e dados de teste...")
@@ -37,19 +37,34 @@ def evaluate_model():
     y_pred = pipeline.predict(X_test)
 
     # Relatórios
-    report = classification_report(y_test, y_pred, target_names=["Sem Risco", "Risco"])
+    # target_names ajuda na interpretação do output textual
+    report = classification_report(
+        y_test, y_pred, target_names=["Sem Risco", "Risco"], zero_division=0
+    )
     cm = confusion_matrix(y_test, y_pred)
 
     print("\n--- Relatório de Classificação ---")
     print(report)
+    print("\n--- Matriz de Confusão ---")
+    try:
+        tn, fp, fn, tp = cm.ravel()
+        print(f"TN: {tn} | FP: {fp}")
+        print(f"FN: {fn} | TP: {tp}")
 
-    recall_risco = cm[1][1] / (cm[1][0] + cm[1][1])
-    logger.info(f"Recall da Classe de Risco: {recall_risco:.2%}")
+        # Cálculo seguro do Recall da classe positiva
+        denominator = fn + tp
+        if denominator > 0:
+            recall_risco = tp / denominator
+            logger.info(f"Recall da Classe de Risco: {recall_risco:.2%}")
+        else:
+            logger.warning(
+                "Não há exemplos positivos no conjunto de teste para calcular Recall."
+            )
 
-    # Loga métricas importantes para histórico
-    logger.info(
-        f"Matriz de Confusão: TN={cm[0][0]}, FP={cm[0][1]}, FN={cm[1][0]}, TP={cm[1][1]}"
-    )
+        logger.info(f"Matriz de Confusão: TN={tn}, FP={fp}, FN={fn}, TP={tp}")
+    except ValueError:
+        # Caso a matriz de confusão não tenha formato 2x2 (ex: só uma classe no teste)
+        logger.warning(f"Matriz de confusão com formato inesperado: {cm.shape}")
 
 
 if __name__ == "__main__":

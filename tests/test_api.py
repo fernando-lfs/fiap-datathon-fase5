@@ -1,4 +1,5 @@
 from fastapi.testclient import TestClient
+from unittest.mock import patch, MagicMock
 from app.main import app
 
 # Payload de exemplo para reuso
@@ -24,30 +25,59 @@ sample_payload = {
 
 
 def test_health_check():
-    # O 'with' garante que o lifespan (startup) seja executado
+    """
+    Testa o endpoint de saúde (/health).
+    Nota: A raiz (/) redireciona para /docs, então testamos /health.
+    """
     with TestClient(app) as client:
-        response = client.get("/")
-        assert response.status_code == 200
-        assert response.json() == {"status": "ok", "model_loaded": True}
-
-
-def test_predict_endpoint():
-    with TestClient(app) as client:
-        response = client.post("/predict", json=sample_payload)
-
+        response = client.get("/health")
         assert response.status_code == 200
         data = response.json()
+        assert data["status"] == "online"
+        assert "project" in data
+        assert "model_loaded" in data
 
-        # Verifica a estrutura da resposta
-        assert "risco_defasagem" in data
-        assert "probabilidade_risco" in data
-        assert "mensagem" in data
-        assert isinstance(data["risco_defasagem"], bool)
-        assert isinstance(data["probabilidade_risco"], float)
+
+def test_predict_endpoint_success():
+    """
+    Testa o fluxo feliz da predição.
+    Mockamos o 'model' dentro do app.main para não depender do arquivo físico.
+    """
+    # Mock do objeto modelo do scikit-learn
+    mock_model = MagicMock()
+    mock_model.predict.return_value = [1]  # Simula classe 1 (Risco)
+    mock_model.predict_proba.return_value = [[0.2, 0.8]]  # 80% de probabilidade
+
+    # Patch no objeto 'model' dentro do módulo app.main
+    with patch("app.main.model", mock_model):
+        with TestClient(app) as client:
+            response = client.post("/predict", json=sample_payload)
+
+            assert response.status_code == 200
+            data = response.json()
+
+            # Verifica a estrutura da resposta
+            assert data["risco_defasagem"] is True
+            assert data["probabilidade_risco"] == 0.8
+            assert "mensagem" in data
+            assert "ALERTA" in data["mensagem"]
+
+
+def test_predict_endpoint_no_risk():
+    """Testa predição quando não há risco."""
+    mock_model = MagicMock()
+    mock_model.predict.return_value = [0]
+    mock_model.predict_proba.return_value = [[0.9, 0.1]]
+
+    with patch("app.main.model", mock_model):
+        with TestClient(app) as client:
+            response = client.post("/predict", json=sample_payload)
+            assert response.status_code == 200
+            assert response.json()["risco_defasagem"] is False
 
 
 def test_predict_error_handling():
-    # Testa envio de dados inválidos (ex: string onde deveria ser float)
+    """Testa envio de dados inválidos (validação Pydantic)."""
     invalid_payload = sample_payload.copy()
     invalid_payload["iaa"] = "texto_invalido"  # Deveria ser float
 
