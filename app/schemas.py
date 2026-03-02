@@ -4,6 +4,7 @@ from typing import Optional
 
 class AlunoInput(BaseModel):
     genero: str = Field(..., description="Gênero do aluno (ex: Menina, Menino)")
+    fase: int = Field(..., description="Fase atual do aluno")  # <--- NOVO CAMPO
     ano_ingresso: int = Field(..., description="Ano de ingresso na associação")
     instituicao_de_ensino: str = Field(
         ..., description="Tipo de instituição (ex: Escola Pública)"
@@ -22,11 +23,15 @@ class AlunoInput(BaseModel):
     indicado: str = Field(..., description="Indicado para bolsa? (Sim/Não)")
     atingiu_pv: str = Field(..., description="Atingiu Ponto de Virada? (Sim/Não)")
     ipv: float = Field(..., description="Indicador de Ponto de Virada")
+    ian: float = Field(
+        ..., description="Indicador de Adequação ao Nível"
+    )  # <--- NOVO CAMPO
 
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
                 "genero": "Menina",
+                "fase": 7,  # <--- NOVO NO EXEMPLO
                 "ano_ingresso": 2018,
                 "instituicao_de_ensino": "Escola Pública",
                 "pedra_20": "Ametista",
@@ -43,6 +48,7 @@ class AlunoInput(BaseModel):
                 "indicado": "Não",
                 "atingiu_pv": "Não",
                 "ipv": 7.2,
+                "ian": 6.5,  # <--- NOVO NO EXEMPLO
             }
         }
     )

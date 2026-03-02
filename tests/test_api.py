@@ -2,9 +2,10 @@ from fastapi.testclient import TestClient
 from unittest.mock import patch, MagicMock
 from app.main import app
 
-# Payload de exemplo para reuso
+# Payload de exemplo (Já atualizado com 'fase' e 'ian')
 sample_payload = {
     "genero": "Menina",
+    "fase": 7,
     "ano_ingresso": 2018,
     "instituicao_de_ensino": "Escola Pública",
     "pedra_20": "Ametista",
@@ -21,13 +22,13 @@ sample_payload = {
     "indicado": "Não",
     "atingiu_pv": "Não",
     "ipv": 7.2,
+    "ian": 5.0,
 }
 
 
 def test_health_check():
     """
     Testa o endpoint de saúde (/health).
-    Nota: A raiz (/) redireciona para /docs, então testamos /health.
     """
     with TestClient(app) as client:
         response = client.get("/health")
@@ -41,15 +42,18 @@ def test_health_check():
 def test_predict_endpoint_success():
     """
     Testa o fluxo feliz da predição.
-    Mockamos o 'model' dentro do app.main para não depender do arquivo físico.
+    CORREÇÃO: Mockamos o 'joblib.load' para que o lifespan carregue o mock
+    em vez do arquivo real.
     """
     # Mock do objeto modelo do scikit-learn
     mock_model = MagicMock()
     mock_model.predict.return_value = [1]  # Simula classe 1 (Risco)
     mock_model.predict_proba.return_value = [[0.2, 0.8]]  # 80% de probabilidade
 
-    # Patch no objeto 'model' dentro do módulo app.main
-    with patch("app.main.model", mock_model):
+    # AQUI ESTÁ O PULO DO GATO:
+    # Interceptamos o carregamento do arquivo. Assim, quando a API iniciar,
+    # ela vai colocar o nosso mock_model dentro da variável global 'model'.
+    with patch("app.main.joblib.load", return_value=mock_model):
         with TestClient(app) as client:
             response = client.post("/predict", json=sample_payload)
 
@@ -69,7 +73,8 @@ def test_predict_endpoint_no_risk():
     mock_model.predict.return_value = [0]
     mock_model.predict_proba.return_value = [[0.9, 0.1]]
 
-    with patch("app.main.model", mock_model):
+    # Mesma estratégia de patch aqui
+    with patch("app.main.joblib.load", return_value=mock_model):
         with TestClient(app) as client:
             response = client.post("/predict", json=sample_payload)
             assert response.status_code == 200

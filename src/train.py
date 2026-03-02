@@ -7,8 +7,11 @@ from sklearn.compose import ColumnTransformer
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from sklearn.impute import SimpleImputer
 from sklearn.linear_model import LogisticRegression
+
+# Imports internos modularizados
 from src.utils import setup_logger
-from src.transformers import PedraMapper, BinaryCleaner
+from src.preprocessing import load_dataset
+from src.feature_engineering import PedraMapper, BinaryCleaner
 
 # Garante output pandas em todo o pipeline
 sklearn.set_config(transform_output="pandas")
@@ -20,25 +23,16 @@ def get_project_root() -> Path:
     return Path(__file__).resolve().parent.parent
 
 
-def load_train_data(data_dir: Path):
-    try:
-        X_train = pd.read_csv(data_dir / "X_train.csv")
-        y_train = pd.read_csv(data_dir / "y_train.csv")
-        return X_train, y_train.values.ravel()
-    except FileNotFoundError:
-        logger.error("Arquivos de treino não encontrados.")
-        raise
-
-
 def create_pipeline(X_train: pd.DataFrame) -> Pipeline:
     """
     Cria o pipeline completo de ML.
     """
-
     # 1. Definição de Grupos de Colunas
     ideal_categorical = ["genero", "instituicao_de_ensino"]
 
-    # NOTA: Pedra 22 removida intencionalmente (Leakage)
+    # PREVENÇÃO DE DATA LEAKAGE:
+    # Removemos 'pedra_22' pois ela pode conter a resposta do alvo (risco em 2022).
+    # Usamos apenas o histórico (20, 21).
     ideal_pedra = ["pedra_20", "pedra_21"]
 
     ideal_binary = ["indicado", "atingiu_pv", "indicado_bolsa", "ponto_virada"]
@@ -85,6 +79,7 @@ def create_pipeline(X_train: pd.DataFrame) -> Pipeline:
     )
 
     # 3. ColumnTransformer
+    # Nota: PedraMapper e BinaryCleaner rodam ANTES disso no pipeline principal
     preprocessor = ColumnTransformer(
         transformers=[
             ("num", numeric_transformer, cols_numerical),
@@ -120,10 +115,12 @@ def run_training():
 
     logger.info("Iniciando processo de treinamento...")
 
-    if not (data_dir / "X_train.csv").exists():
-        raise FileNotFoundError("Dados de treino não encontrados.")
+    # Carregamento via módulo preprocessing
+    X_train = load_dataset(data_dir / "X_train.csv")
 
-    X_train, y_train = load_train_data(data_dir)
+    # Carregando y_train (tratamento simples pois é apenas uma coluna)
+    y_train_df = load_dataset(data_dir / "y_train.csv")
+    y_train = y_train_df.values.ravel()
 
     logger.info("Construindo pipeline...")
     pipeline = create_pipeline(X_train)

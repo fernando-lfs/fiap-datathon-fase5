@@ -1,100 +1,83 @@
 import pandas as pd
-from pathlib import Path
-from sklearn.model_selection import train_test_split
+from sklearn.base import BaseEstimator, TransformerMixin
 from src.utils import setup_logger
 
 logger = setup_logger("feature_engineering")
 
 
-def get_project_root() -> Path:
-    return Path(__file__).resolve().parent.parent
-
-
-def load_processed_data(filepath: Path) -> pd.DataFrame:
-    if not filepath.exists():
-        raise FileNotFoundError(f"Arquivo não encontrado: {filepath}")
-    return pd.read_csv(filepath)
-
-
-def select_features(df: pd.DataFrame) -> pd.DataFrame:
+class PedraMapper(BaseEstimator, TransformerMixin):
     """
-    Remove colunas que causam Data Leakage ou ruído.
-
-    CRITÉRIO DE LEAKAGE:
-    Estamos prevendo o risco de defasagem (target derivado de 2022).
-    Portanto, qualquer métrica consolidada de 2022 (INDE, Pedra, Notas Finais)
-    é uma resposta do futuro ("vazamento") e deve ser removida.
-    O modelo deve prever o risco 2022 baseado no histórico (2020, 2021).
+    Transformer customizado para converter a variável ordinal 'Pedra' em valores numéricos.
+    Preserva a hierarquia: Quartzo (1) < Ágata (2) < Ametista (3) < Topázio (4).
     """
 
-    # 1. Identificadores e Metadados
-    ids_and_meta = ["nome", "ra", "turma", "cg", "cf", "ct", "ano_nasc"]
+    def __init__(self):
+        self.pedra_map = {
+            "quartzo": 1,
+            "ágata": 2,
+            "agata": 2,
+            "ametista": 3,
+            "topázio": 4,
+            "topazio": 4,
+        }
+        # Lista de colunas conhecidas de Pedra
+        self.cols_pedra = ["pedra_20", "pedra_21", "pedra_22"]
 
-    # 2. Data Leakage (Variáveis do Ano Alvo - 2022)
-    # Se o aluno já tem INDE_22 ou PEDRA_22, o ano já acabou.
-    leakage_2022 = [
-        "defas",
-        "fase_ideal",
-        "fase_22",
-        "idade_22",
-        "ian_22",
-        "inde_22",
-        "pedra_22",
-        "ipv_22",
-        "iaa_22",
-        "ieg_22",
-        "ips_22",
-        "ida_22",
-        "ipp_22",
-    ]
+    def fit(self, X, y=None):
+        return self
 
-    # 3. Colunas de Texto Livre (NLP fora do escopo)
-    text_cols = [
-        c for c in df.columns if "rec_" in c or "destaque_" in c or "avaliador" in c
-    ]
+    def transform(self, X):
+        X = X.copy()
+        for col in self.cols_pedra:
+            if col in X.columns:
+                # Converte para string, lowercase, mapeia e preenche nulos com 0
+                X[col] = (
+                    X[col]
+                    .astype(str)
+                    .str.lower()
+                    .map(self.pedra_map)
+                    .fillna(0)
+                    .astype(int)
+                )
+        return X
 
-    drop_cols = ids_and_meta + leakage_2022 + text_cols
-
-    # Interseção segura (apenas remove o que existe)
-    cols_to_drop = [c for c in drop_cols if c in df.columns]
-
-    df = df.drop(columns=cols_to_drop)
-
-    logger.info(f"Colunas removidas: {len(cols_to_drop)}")
-    logger.debug(f"Lista de removidas: {cols_to_drop}")
-    return df
+    def get_feature_names_out(self, input_features=None):
+        return input_features
 
 
-def run_feature_engineering(input_path: Path):
-    logger.info("Iniciando Feature Engineering...")
-    df = load_processed_data(input_path)
+class BinaryCleaner(BaseEstimator, TransformerMixin):
+    """
+    Transformer para padronização de variáveis booleanas textuais.
+    Converte: 'Sim', 'S' -> 1 e 'Não', 'N' -> 0.
+    """
 
-    # Seleção de Features
-    df = select_features(df)
+    def __init__(self):
+        self.binary_map = {"sim": 1, "não": 0, "nao": 0, "s": 1, "n": 0}
+        # Keywords para identificar colunas binárias dinamicamente
+        self.target_keywords = ["indicado", "ponto_virada", "atingiu_pv", "bolsa"]
 
-    if "alvo" not in df.columns:
-        logger.error("Coluna 'alvo' não encontrada. Verifique o pré-processamento.")
-        raise ValueError("Coluna 'alvo' ausente.")
+    def fit(self, X, y=None):
+        return self
 
-    X = df.drop(columns=["alvo"])
-    y = df["alvo"]
+    def transform(self, X):
+        X = X.copy()
+        for col in X.columns:
+            # Verifica se a coluna contém alguma das palavras-chave
+            if any(k in col for k in self.target_keywords):
+                # Aplica apenas se não for numérico (evita re-processar se já for int)
+                if not pd.api.types.is_numeric_dtype(X[col]):
+                    try:
+                        X[col] = (
+                            X[col]
+                            .astype(str)
+                            .str.lower()
+                            .map(self.binary_map)
+                            .fillna(0)
+                            .astype(int)
+                        )
+                    except Exception as e:
+                        logger.warning(f"Falha ao converter coluna binária {col}: {e}")
+        return X
 
-    # Split Estratificado (Mantém proporção de risco)
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=42, stratify=y
-    )
-
-    output_dir = get_project_root() / "data" / "processed"
-    X_train.to_csv(output_dir / "X_train.csv", index=False)
-    X_test.to_csv(output_dir / "X_test.csv", index=False)
-    y_train.to_csv(output_dir / "y_train.csv", index=False)
-    y_test.to_csv(output_dir / "y_test.csv", index=False)
-
-    logger.info(f"Split concluído. Treino: {X_train.shape}, Teste: {X_test.shape}")
-    return X_train.columns.tolist()
-
-
-if __name__ == "__main__":
-    root = get_project_root()
-    input_file = root / "data" / "processed" / "dataset_limpo.csv"
-    run_feature_engineering(input_file)
+    def get_feature_names_out(self, input_features=None):
+        return input_features

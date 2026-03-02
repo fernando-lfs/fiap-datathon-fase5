@@ -1,23 +1,18 @@
-import pandas as pd
 import joblib
 from pathlib import Path
 from sklearn.metrics import classification_report, confusion_matrix
-from src.utils import setup_logger
 
-# Import necessário para o joblib reconhecer as classes customizadas
-from src.transformers import PedraMapper, BinaryCleaner  # noqa: F401
+from src.utils import setup_logger
+from src.preprocessing import load_dataset
+
+# Import necessário para o joblib reconhecer as classes customizadas ao carregar o pipeline
+from src.feature_engineering import PedraMapper, BinaryCleaner  # noqa: F401
 
 logger = setup_logger("evaluate")
 
 
 def get_project_root() -> Path:
     return Path(__file__).resolve().parent.parent
-
-
-def load_test_data(data_dir: Path):
-    X_test = pd.read_csv(data_dir / "X_test.csv")
-    y_test = pd.read_csv(data_dir / "y_test.csv")
-    return X_test, y_test.values.ravel()
 
 
 def evaluate_model():
@@ -30,14 +25,20 @@ def evaluate_model():
         return
 
     logger.info("Carregando modelo e dados de teste...")
-    pipeline = joblib.load(model_path)
-    X_test, y_test = load_test_data(data_dir)
+
+    try:
+        pipeline = joblib.load(model_path)
+        X_test = load_dataset(data_dir / "X_test.csv")
+        y_test_df = load_dataset(data_dir / "y_test.csv")
+        y_test = y_test_df.values.ravel()
+    except Exception as e:
+        logger.error(f"Erro ao carregar recursos: {e}")
+        return
 
     logger.info("Realizando predições...")
     y_pred = pipeline.predict(X_test)
 
     # Relatórios
-    # target_names ajuda na interpretação do output textual
     report = classification_report(
         y_test, y_pred, target_names=["Sem Risco", "Risco"], zero_division=0
     )
@@ -51,7 +52,6 @@ def evaluate_model():
         print(f"TN: {tn} | FP: {fp}")
         print(f"FN: {fn} | TP: {tp}")
 
-        # Cálculo seguro do Recall da classe positiva
         denominator = fn + tp
         if denominator > 0:
             recall_risco = tp / denominator
@@ -63,7 +63,6 @@ def evaluate_model():
 
         logger.info(f"Matriz de Confusão: TN={tn}, FP={fp}, FN={fn}, TP={tp}")
     except ValueError:
-        # Caso a matriz de confusão não tenha formato 2x2 (ex: só uma classe no teste)
         logger.warning(f"Matriz de confusão com formato inesperado: {cm.shape}")
 
 

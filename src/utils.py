@@ -8,13 +8,13 @@ def setup_logger(
 ) -> logging.Logger:
     """
     Configura um logger padronizado para a aplicação.
+    Garante que logs sejam exibidos no console e salvos em arquivo.
     """
-    # Formato do log: Data - Nome do Modulo - Nivel - Mensagem
     formatter = logging.Formatter(
         "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     )
 
-    # Handler para Console (Terminal)
+    # Handler para Console
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setFormatter(formatter)
 
@@ -27,7 +27,6 @@ def setup_logger(
     logger = logging.getLogger(name)
     logger.setLevel(level)
 
-    # Evita duplicidade de handlers se a função for chamada múltiplas vezes
     if not logger.handlers:
         logger.addHandler(console_handler)
         logger.addHandler(file_handler)

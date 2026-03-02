@@ -10,7 +10,8 @@ from app.config import settings
 from src.utils import setup_logger
 
 # IMPORTANTE: Necessário para o joblib reconstruir o pipeline corretamente
-from src.transformers import PedraMapper, BinaryCleaner  # noqa: F401
+# Agora importamos de feature_engineering, onde as classes residem
+from src.feature_engineering import PedraMapper, BinaryCleaner  # noqa: F401
 
 # Garante output pandas também na inferência
 sklearn.set_config(transform_output="pandas")
@@ -88,9 +89,6 @@ def predict(aluno: AlunoInput):
 
         # 2. Predição
         # O pipeline cuida do pré-processamento completo.
-        # NOTA: Se o input contiver colunas de leakage (ex: pedra_22),
-        # o ColumnTransformer do pipeline irá ignorá-las silenciosamente,
-        # pois foi treinado sem elas. Isso é o comportamento desejado.
         prediction = model.predict(df_input)[0]
         proba = model.predict_proba(df_input)[0][1]
 
@@ -107,7 +105,6 @@ def predict(aluno: AlunoInput):
             log_msg = f"{proba:.4f},{risco},{aluno.genero},{aluno.instituicao_de_ensino},{aluno.pedra_20}"
             drift_logger.info(log_msg)
         except Exception as e:
-            # Falha no log não deve parar a resposta da API, apenas avisa no log da aplicação
             app_logger.error(f"Falha não-bloqueante ao registrar log de drift: {e}")
 
         return PredicaoOutput(
