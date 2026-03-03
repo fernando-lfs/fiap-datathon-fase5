@@ -1,112 +1,109 @@
 import pandas as pd
 import pytest
-from pathlib import Path
-import sklearn
 import joblib
+import sys
+from pathlib import Path
 
-# Importamos os módulos para poder fazer o patch das funções de caminho
-import src.feature_engineering
+# Imports dos módulos do projeto
+import src.preprocessing
 import src.train
 import src.evaluate
-from src.feature_engineering import run_feature_engineering
-from src.train import run_training
-from src.evaluate import evaluate_model
-
-# Garante configuração consistente nos testes
-sklearn.set_config(transform_output="pandas")
 
 
-@pytest.fixture(scope="module")
-def setup_test_environment(tmp_path_factory):
+@pytest.fixture
+def mock_project_root(tmp_path, monkeypatch):
     """
-    Cria um ambiente isolado com dados fake para testar o pipeline completo.
+    Fixture que redireciona o 'get_project_root' e caminhos fixos
+    para um diretório temporário durante os testes.
     """
-    # Cria diretórios temporários
-    temp_dir = tmp_path_factory.mktemp("data_test")
-    raw_dir = temp_dir / "data" / "raw"
-    processed_dir = temp_dir / "data" / "processed"
-    model_dir = temp_dir / "app" / "model"
+    # Cria estrutura de pastas no diretório temporário
+    d = tmp_path
+    (d / "data" / "raw").mkdir(parents=True, exist_ok=True)
+    (d / "data" / "processed").mkdir(parents=True, exist_ok=True)
+    (d / "app" / "model").mkdir(parents=True, exist_ok=True)
+    (d / "logs").mkdir(exist_ok=True)
 
-    raw_dir.mkdir(parents=True, exist_ok=True)
-    processed_dir.mkdir(parents=True, exist_ok=True)
-    model_dir.mkdir(parents=True, exist_ok=True)
+    # Função que retorna o caminho temporário
+    def mock_return():
+        return d
 
-    # Cria CSV dummy simulando o dataset_limpo.csv
-    # IMPORTANTE: O dataset deve conter colunas que NÃO são removidas pelo feature_engineering
-    # e a coluna 'alvo' já criada pelo preprocessing.
+    # Aplica o monkeypatch nas funções que definem caminhos
+    monkeypatch.setattr(src.train, "get_project_root", mock_return)
+    monkeypatch.setattr(src.evaluate, "get_project_root", mock_return)
+
+    # O preprocessing usa Path(__file__)... no main, mas nos testes chamamos as funções direto.
+    # Vamos apenas retornar o path raiz para uso no teste
+    return d
+
+
+def test_full_pipeline_execution(mock_project_root):
+    """
+    Teste de Integração (Smoke Test):
+    1. Cria CSV Raw dummy.
+    2. Executa Preprocessing (Load -> Target -> Split).
+    3. Executa Training (Train -> Save Model).
+    4. Executa Evaluate (Load Model -> Predict).
+    """
+    root = mock_project_root
+    raw_file = root / "data" / "raw" / "dataset_pede_passos.csv"
+
+    # 1. CRIAÇÃO DE DADOS DUMMY (RAW)
+    # Precisamos de colunas suficientes para o pipeline não quebrar
     df_dummy = pd.DataFrame(
         {
-            "genero": ["Menina", "Menino"] * 25,
-            "instituicao_de_ensino": ["Publica", "Privada"] * 25,
-            "pedra_20": ["Ametista", "Quartzo"] * 25,
-            "pedra_21": ["Ametista", "Quartzo"] * 25,
-            # pedra_22 removida propositalmente pois é leakage
-            "indicado_bolsa": ["Sim", "Não"] * 25,
-            "ponto_virada": ["Sim", "Não"] * 25,
-            "atingiu_pv": ["Sim", "Não"] * 25,
-            "indicado": ["Sim", "Não"] * 25,
-            "n_av": [3, 4] * 25,
-            "iaa": [5.5, 8.5] * 25,
-            "ieg": [6.0, 9.0] * 25,
-            "ips": [7.5, 7.5] * 25,
-            "ida": [5.0, 8.0] * 25,
-            "matem": [5.0, 8.0] * 25,
-            "portug": [5.0, 8.0] * 25,
-            "ingles": [5.0, 8.0] * 25,
-            "ipv": [5.0, 8.0] * 25,
-            "alvo": [0, 1] * 25,  # Target balanceado
+            "RA": [f"RA-{i}" for i in range(20)],
+            "Fase": [1] * 20,
+            "Turma": ["A"] * 20,
+            "Nome": [f"Aluno {i}" for i in range(20)],
+            "Gênero": ["Menina", "Menino"] * 10,
+            "Instituição de ensino": ["Publica", "Privada"] * 10,
+            "Pedra 20": ["Ametista", "Quartzo"] * 10,
+            "Pedra 21": ["Ametista", "Quartzo"] * 10,
+            "Pedra 22": ["Ametista"] * 20,  # Será ignorada ou usada como feature futura
+            "Indicado": ["Sim", "Não"] * 10,
+            "Atingiu PV": ["Sim", "Não"] * 10,
+            "Ponto Virada": ["Sim", "Não"] * 10,
+            "Indicado Bolsa": ["Sim", "Não"] * 10,
+            "IAA": [8.5, 5.5] * 10,
+            "IEG": [7.0, 6.0] * 10,
+            "IPS": [7.5, 7.5] * 10,
+            "IDA": [6.0, 5.0] * 10,
+            "IPP": [7.0, 7.0] * 10,
+            "IPV": [7.0, 7.0] * 10,
+            "Matemática": ["8,5", "5,0"] * 10,  # String PT-BR para testar conversão
+            "Português": ["8,5", "5,0"] * 10,
+            "Inglês": ["8,5", "5,0"] * 10,
+            "Defas": [-1, 0] * 10,  # Gera ALVO 1 e 0
         }
     )
+    df_dummy.to_csv(raw_file, index=False)
 
-    input_file = processed_dir / "dataset_limpo.csv"
-    df_dummy.to_csv(input_file, index=False)
+    # 2. EXECUÇÃO DO PREPROCESSING
+    # Chamamos as funções sequencialmente como o script faria
+    try:
+        df = src.preprocessing.load_dataset(raw_file)
+        df = src.preprocessing.create_target(df)
+        src.preprocessing.save_split_data(df, root / "data")
+    except Exception as e:
+        pytest.fail(f"Falha no Preprocessing: {e}")
 
-    # --- MONKEY PATCHING ---
-    # Substituímos a função get_project_root dos módulos para apontar para o temp_dir
-    # Isso impede que o teste escreva na pasta real do projeto
+    # Verifica se arquivos processados foram criados
+    assert (root / "data" / "processed" / "X_train.csv").exists()
+    assert (root / "data" / "processed" / "y_train.csv").exists()
 
-    orig_root_fe = src.feature_engineering.get_project_root
-    orig_root_tr = src.train.get_project_root
-    orig_root_ev = src.evaluate.get_project_root
+    # 3. EXECUÇÃO DO TREINAMENTO
+    try:
+        src.train.run_training()
+    except Exception as e:
+        pytest.fail(f"Falha no Training: {e}")
 
-    src.feature_engineering.get_project_root = lambda: temp_dir
-    src.train.get_project_root = lambda: temp_dir
-    src.evaluate.get_project_root = lambda: temp_dir
-
-    yield temp_dir, input_file
-
-    # Restaura os caminhos originais após o teste (Teardown)
-    src.feature_engineering.get_project_root = orig_root_fe
-    src.train.get_project_root = orig_root_tr
-    src.evaluate.get_project_root = orig_root_ev
-
-
-def test_full_pipeline_execution(setup_test_environment):
-    """
-    Smoke Test: Roda o pipeline inteiro (Feature Eng -> Train -> Evaluate)
-    Verifica se os arquivos são gerados e se não há erros de execução.
-    """
-    temp_dir, input_file = setup_test_environment
-
-    # 1. Feature Engineering
-    # Deve gerar X_train, X_test, etc.
-    cols = run_feature_engineering(input_file)
-    assert (temp_dir / "data" / "processed" / "X_train.csv").exists()
-    assert len(cols) > 0
-
-    # 2. Treinamento
-    # Deve gerar o pipeline.joblib
-    run_training()
-    model_path = temp_dir / "app" / "model" / "pipeline.joblib"
+    # Verifica se o modelo foi salvo
+    model_path = root / "app" / "model" / "pipeline.joblib"
     assert model_path.exists()
 
-    # Verifica se o modelo salvo é carregável
-    pipeline = joblib.load(model_path)
-    assert pipeline is not None
-
-    # 3. Avaliação
-    # Não deve lançar exceção
+    # 4. EXECUÇÃO DA AVALIAÇÃO
     try:
-        evaluate_model()
+        # Redireciona stdout para não poluir o console de testes
+        src.evaluate.evaluate_model()
     except Exception as e:
-        pytest.fail(f"Evaluate falhou: {e}")
+        pytest.fail(f"Falha no Evaluate: {e}")

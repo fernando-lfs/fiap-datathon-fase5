@@ -10,7 +10,6 @@ from app.config import settings
 from src.utils import setup_logger
 
 # IMPORTANTE: Necessário para o joblib reconstruir o pipeline corretamente
-# Agora importamos de feature_engineering, onde as classes residem
 from src.feature_engineering import PedraMapper, BinaryCleaner  # noqa: F401
 
 # Garante output pandas também na inferência
@@ -53,9 +52,10 @@ async def lifespan(app: FastAPI):
             app_logger.info(f"Modelo carregado com sucesso de: {settings.MODEL_PATH}")
         except Exception as e:
             app_logger.critical(f"Falha crítica ao carregar modelo: {e}")
+            model = None  # Garante que model seja None se falhar
     else:
         app_logger.warning(
-            f"Modelo não encontrado em {settings.MODEL_PATH}. A API retornará erros."
+            f"Modelo não encontrado em {settings.MODEL_PATH}. A API retornará erros 503."
         )
     yield
     model = None
@@ -70,9 +70,37 @@ app = FastAPI(
 
 
 def prepare_input_dataframe(data: AlunoInput) -> pd.DataFrame:
-    """Converte o input Pydantic para DataFrame compatível com o Pipeline."""
+    """
+    Converte o input Pydantic para DataFrame compatível com o Pipeline.
+    """
     input_dict = data.model_dump()
     df = pd.DataFrame([input_dict])
+
+    # Colunas que podem ser esperadas pelo pipeline (mesmo que descartadas depois)
+    # para evitar erro de "columns are missing" do Scikit-Learn se o ColumnTransformer
+    # foi treinado vendo essas colunas no X_train original.
+    # Nota: inde_22, cg, cf, ct foram removidos do treino, mas mantemos aqui por segurança.
+    missing_cols = {
+        "idade_22": 0,
+        "n_av": 0,
+        "ano_ingresso": 2022,
+        "ano_nasc": 0,
+        "ra": "API_REQ",
+        "nome": "API_REQ",
+        "turma": "API",
+        "fase": 0,
+        "ian": 0.0,
+        "fase_ideal": 0,
+        "inde_22": 0.0,
+        "cg": 0,
+        "cf": 0,
+        "ct": 0,
+    }
+
+    for col, default_val in missing_cols.items():
+        if col not in df.columns:
+            df[col] = default_val
+
     return df
 
 
@@ -80,7 +108,7 @@ def prepare_input_dataframe(data: AlunoInput) -> pd.DataFrame:
 def predict(aluno: AlunoInput):
     if not model:
         raise HTTPException(
-            status_code=503, detail="Modelo não carregado ou indisponível."
+            status_code=503, detail="Modelo não carregado ou indisponível no servidor."
         )
 
     try:
@@ -90,7 +118,12 @@ def predict(aluno: AlunoInput):
         # 2. Predição
         # O pipeline cuida do pré-processamento completo.
         prediction = model.predict(df_input)[0]
-        proba = model.predict_proba(df_input)[0][1]
+
+        # Tenta pegar probabilidade, se o modelo suportar
+        if hasattr(model, "predict_proba"):
+            proba = model.predict_proba(df_input)[0][1]
+        else:
+            proba = 1.0 if prediction == 1 else 0.0
 
         risco = bool(prediction == 1)
         mensagem = (
@@ -102,6 +135,7 @@ def predict(aluno: AlunoInput):
         # 3. Log para Monitoramento de Drift
         try:
             # Logamos features chave para monitorar mudanças na distribuição dos dados
+            # Formato CSV: proba, risco, genero, instituicao, pedra_20
             log_msg = f"{proba:.4f},{risco},{aluno.genero},{aluno.instituicao_de_ensino},{aluno.pedra_20}"
             drift_logger.info(log_msg)
         except Exception as e:

@@ -1,23 +1,26 @@
 import pandas as pd
-import pytest
-
-# Adicione convert_numeric_columns na importação abaixo
-from src.preprocessing import (
-    clean_column_names,
-    create_target_variable,
-    convert_numeric_columns,
-)
-from src.transformers import PedraMapper, BinaryCleaner
+import numpy as np
+from src.preprocessing import normalize_columns, create_target
+from src.feature_engineering import PedraMapper, BinaryCleaner
 
 
-def test_clean_column_names():
-    # Testa conversão de espaços, acentos e caixa alta
-    df = pd.DataFrame({"INDE 22": [1], "Pedra 20": ["A"], "Média Port.": [5]})
-    df_clean = clean_column_names(df)
+def test_normalize_columns():
+    """Testa a normalização de nomes de colunas (snake_case e acentos)."""
+    df = pd.DataFrame(
+        {
+            "INDE 22": [1],
+            "Pedra 20": ["A"],
+            "Média Port.": [5],
+            "Instituição de Ensino": ["Pub"],
+        }
+    )
+    df_clean = normalize_columns(df)
 
+    # Verifica se as colunas esperadas existem após renomeação
     assert "inde_22" in df_clean.columns
     assert "pedra_20" in df_clean.columns
-    assert "media_port" in df_clean.columns
+    # Verifica substituição específica definida no código
+    assert "instituicao_de_ensino" in df_clean.columns
 
 
 def test_pedra_mapper():
@@ -36,50 +39,30 @@ def test_binary_cleaner():
     df = pd.DataFrame(
         {
             "indicado_bolsa": ["Sim", "Não", "S", "N"],
+            "ponto_virada": ["sim", "nao", "s", "n"],
             "outra_coluna": ["Sim", "Não", "S", "N"],  # Não deve mudar (sem keyword)
         }
     )
     cleaner = BinaryCleaner()
     df_trans = cleaner.transform(df)
 
+    # Verifica conversão 1/0
     assert df_trans["indicado_bolsa"].tolist() == [1, 0, 1, 0]
+    assert df_trans["ponto_virada"].tolist() == [1, 0, 1, 0]
+
     # Verifica se não alterou colunas fora da lista de keywords
     assert df_trans["outra_coluna"].tolist() == ["Sim", "Não", "S", "N"]
 
 
-def test_create_target_variable():
+def test_create_target():
+    """Testa a criação da variável ALVO e remoção de Data Leakage."""
     # Defasagem negativa (-1) = Atraso = Alvo 1
     # Defasagem positiva ou zero = Em dia = Alvo 0
     df = pd.DataFrame({"defas": [-1, 0, -2, 1]})
-    df_target = create_target_variable(df)
-    assert df_target["alvo"].tolist() == [1, 0, 1, 0]
+    df_target = create_target(df)
 
+    assert "ALVO" in df_target.columns
+    assert df_target["ALVO"].tolist() == [1, 0, 1, 0]
 
-# --- NOVO TESTE PARA AUMENTAR COBERTURA ---
-def test_convert_numeric_columns():
-    """
-    Testa a conversão de strings numéricas PT-BR (1.000,00) para float (1000.0).
-    Cobre a lógica de loop e regex do preprocessing.py.
-    """
-    df = pd.DataFrame(
-        {
-            # Colunas que devem ser convertidas (keywords: inde, matem)
-            "inde_2022": ["1.000,50", "500,00", "0"],
-            "nota_matem": ["10,0", "5,5", "0,0"],
-            # Coluna que NÃO deve ser tocada
-            "nome": ["Aluno A", "Aluno B", "Aluno C"],
-        }
-    )
-
-    df_conv = convert_numeric_columns(df)
-
-    # Verifica se virou float
-    assert df_conv["inde_2022"].dtype == "float64"
-    assert df_conv["nota_matem"].dtype == "float64"
-
-    # Verifica valores
-    assert df_conv["inde_2022"].iloc[0] == 1000.5
-    assert df_conv["nota_matem"].iloc[1] == 5.5
-
-    # Verifica se ignorou a coluna de texto
-    assert df_conv["nome"].dtype == "object"
+    # Garante que a coluna original 'defas' foi removida (Leakage)
+    assert "defas" not in df_target.columns
