@@ -36,16 +36,16 @@ def test_health_check():
 def test_predict_endpoint_success():
     """
     Testa o fluxo feliz da predição.
-    CORREÇÃO: Mockamos 'joblib.load' para que o lifespan da API carregue
-    o mock em vez do arquivo real.
+    Utiliza patch no local exato onde o joblib é importado em app.main.
     """
     # Mock do objeto modelo do scikit-learn
     mock_model = MagicMock()
     mock_model.predict.return_value = [1]  # Simula classe 1 (Risco)
+    # Simula probabilidade: [prob_classe_0, prob_classe_1]
     mock_model.predict_proba.return_value = [[0.2, 0.8]]
 
-    # Patch no joblib.load para interceptar o carregamento no startup
-    with patch("joblib.load", return_value=mock_model):
+    # Patch no joblib.load dentro do namespace de app.main
+    with patch("app.main.joblib.load", return_value=mock_model):
         with TestClient(app) as client:
             response = client.post("/predict", json=sample_payload)
 
@@ -63,16 +63,19 @@ def test_predict_endpoint_no_risk():
     mock_model.predict.return_value = [0]
     mock_model.predict_proba.return_value = [[0.9, 0.1]]
 
-    with patch("joblib.load", return_value=mock_model):
+    with patch("app.main.joblib.load", return_value=mock_model):
         with TestClient(app) as client:
             response = client.post("/predict", json=sample_payload)
             assert response.status_code == 200
-            assert response.json()["risco_defasagem"] is False
+            data = response.json()
+            assert data["risco_defasagem"] is False
+            assert data["probabilidade_risco"] == 0.1
 
 
 def test_predict_validation_error():
     """Testa envio de dados inválidos (validação Pydantic)."""
     invalid_payload = sample_payload.copy()
+    # Envia string onde deveria ser float
     invalid_payload["iaa"] = "texto_invalido"
 
     with TestClient(app) as client:

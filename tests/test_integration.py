@@ -1,7 +1,6 @@
 import pandas as pd
 import pytest
-import joblib
-import sys
+import shutil
 from pathlib import Path
 
 # Imports dos módulos do projeto
@@ -31,8 +30,6 @@ def mock_project_root(tmp_path, monkeypatch):
     monkeypatch.setattr(src.train, "get_project_root", mock_return)
     monkeypatch.setattr(src.evaluate, "get_project_root", mock_return)
 
-    # O preprocessing usa Path(__file__)... no main, mas nos testes chamamos as funções direto.
-    # Vamos apenas retornar o path raiz para uso no teste
     return d
 
 
@@ -48,7 +45,7 @@ def test_full_pipeline_execution(mock_project_root):
     raw_file = root / "data" / "raw" / "dataset_pede_passos.csv"
 
     # 1. CRIAÇÃO DE DADOS DUMMY (RAW)
-    # Precisamos de colunas suficientes para o pipeline não quebrar
+    # Criamos dados com variação suficiente para evitar warnings de variância zero no Scaler
     df_dummy = pd.DataFrame(
         {
             "RA": [f"RA-{i}" for i in range(20)],
@@ -59,7 +56,7 @@ def test_full_pipeline_execution(mock_project_root):
             "Instituição de ensino": ["Publica", "Privada"] * 10,
             "Pedra 20": ["Ametista", "Quartzo"] * 10,
             "Pedra 21": ["Ametista", "Quartzo"] * 10,
-            "Pedra 22": ["Ametista"] * 20,  # Será ignorada ou usada como feature futura
+            "Pedra 22": ["Ametista"] * 20,  # Será ignorada (forbidden)
             "Indicado": ["Sim", "Não"] * 10,
             "Atingiu PV": ["Sim", "Não"] * 10,
             "Ponto Virada": ["Sim", "Não"] * 10,
@@ -79,7 +76,6 @@ def test_full_pipeline_execution(mock_project_root):
     df_dummy.to_csv(raw_file, index=False)
 
     # 2. EXECUÇÃO DO PREPROCESSING
-    # Chamamos as funções sequencialmente como o script faria
     try:
         df = src.preprocessing.load_dataset(raw_file)
         df = src.preprocessing.create_target(df)
@@ -103,7 +99,7 @@ def test_full_pipeline_execution(mock_project_root):
 
     # 4. EXECUÇÃO DA AVALIAÇÃO
     try:
-        # Redireciona stdout para não poluir o console de testes
+        # Apenas executa para garantir que não quebra
         src.evaluate.evaluate_model()
     except Exception as e:
         pytest.fail(f"Falha no Evaluate: {e}")

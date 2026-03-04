@@ -52,7 +52,7 @@ async def lifespan(app: FastAPI):
             app_logger.info(f"Modelo carregado com sucesso de: {settings.MODEL_PATH}")
         except Exception as e:
             app_logger.critical(f"Falha crítica ao carregar modelo: {e}")
-            model = None  # Garante que model seja None se falhar
+            model = None
     else:
         app_logger.warning(
             f"Modelo não encontrado em {settings.MODEL_PATH}. A API retornará erros 503."
@@ -76,30 +76,21 @@ def prepare_input_dataframe(data: AlunoInput) -> pd.DataFrame:
     input_dict = data.model_dump()
     df = pd.DataFrame([input_dict])
 
-    # Colunas que podem ser esperadas pelo pipeline (mesmo que descartadas depois)
-    # para evitar erro de "columns are missing" do Scikit-Learn se o ColumnTransformer
-    # foi treinado vendo essas colunas no X_train original.
-    # Nota: inde_22, cg, cf, ct foram removidos do treino, mas mantemos aqui por segurança.
-    missing_cols = {
-        "idade_22": 0,
-        "n_av": 0,
-        "ano_ingresso": 2022,
-        "ano_nasc": 0,
+    # Adiciona apenas colunas auxiliares que podem ser esperadas por transformers
+    # genéricos ou logs, mas que não afetam a predição se o pipeline estiver correto.
+    # O ColumnTransformer com remainder='drop' cuidará de ignorar o que não for usado.
+    defaults = {
         "ra": "API_REQ",
         "nome": "API_REQ",
         "turma": "API",
         "fase": 0,
-        "ian": 0.0,
-        "fase_ideal": 0,
-        "inde_22": 0.0,
-        "cg": 0,
-        "cf": 0,
-        "ct": 0,
+        "ano_nasc": 0,
+        "ano_ingresso": 2022,
     }
 
-    for col, default_val in missing_cols.items():
+    for col, val in defaults.items():
         if col not in df.columns:
-            df[col] = default_val
+            df[col] = val
 
     return df
 
@@ -116,12 +107,14 @@ def predict(aluno: AlunoInput):
         df_input = prepare_input_dataframe(aluno)
 
         # 2. Predição
-        # O pipeline cuida do pré-processamento completo.
         prediction = model.predict(df_input)[0]
 
-        # Tenta pegar probabilidade, se o modelo suportar
+        # Tenta pegar probabilidade
         if hasattr(model, "predict_proba"):
-            proba = model.predict_proba(df_input)[0][1]
+            try:
+                proba = model.predict_proba(df_input)[0][1]
+            except IndexError:
+                proba = 1.0 if prediction == 1 else 0.0
         else:
             proba = 1.0 if prediction == 1 else 0.0
 
@@ -134,11 +127,11 @@ def predict(aluno: AlunoInput):
 
         # 3. Log para Monitoramento de Drift
         try:
-            # Logamos features chave para monitorar mudanças na distribuição dos dados
-            # Formato CSV: proba, risco, genero, instituicao, pedra_20
+            # Logamos features chave para monitorar mudanças na distribuição
             log_msg = f"{proba:.4f},{risco},{aluno.genero},{aluno.instituicao_de_ensino},{aluno.pedra_20}"
             drift_logger.info(log_msg)
         except Exception as e:
+            # Falha no log não deve parar a API
             app_logger.error(f"Falha não-bloqueante ao registrar log de drift: {e}")
 
         return PredicaoOutput(
@@ -147,10 +140,17 @@ def predict(aluno: AlunoInput):
             mensagem=mensagem,
         )
 
-    except Exception as e:
-        app_logger.error(f"Erro durante a predição: {str(e)}")
+    except ValueError as ve:
+        # Erros de validação do Scikit-Learn (ex: categoria nova desconhecida)
+        app_logger.error(f"Erro de validação do modelo: {ve}")
         raise HTTPException(
-            status_code=400, detail=f"Erro no processamento da predição: {str(e)}"
+            status_code=422,
+            detail=f"Dados de entrada inválidos para o modelo: {str(ve)}",
+        )
+    except Exception as e:
+        app_logger.error(f"Erro genérico durante a predição: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail="Erro interno no processamento da predição."
         )
 
 

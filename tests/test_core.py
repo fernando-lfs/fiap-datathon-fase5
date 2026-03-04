@@ -66,3 +66,18 @@ def test_create_target():
 
     # Garante que a coluna original 'defas' foi removida (Leakage)
     assert "defas" not in df_target.columns
+
+
+def test_create_target_drops_nan():
+    """
+    Testa se linhas com 'defas' nulo são removidas.
+    Requisito de qualidade: Não treinar com target imputado/incerto.
+    """
+    df = pd.DataFrame({"defas": [-1, 0, np.nan, None, ""]})
+
+    # A função deve converter para numeric (coercing errors) e dropar NaNs
+    df_target = create_target(df)
+
+    # Esperamos apenas 2 linhas válidas (-1 e 0)
+    assert len(df_target) == 2
+    assert df_target["ALVO"].tolist() == [1, 0]
