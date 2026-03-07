@@ -16,10 +16,31 @@ logger = setup_logger("evaluate")
 
 
 def get_project_root() -> Path:
+    """
+    Retorna o caminho absoluto para a raiz do projeto.
+
+    Returns:
+        Path: Objeto Path apontando para a raiz.
+    """
     return Path(__file__).resolve().parent.parent
 
 
 def evaluate_model():
+    """
+    Executa a avaliação do modelo treinado utilizando o conjunto de teste.
+
+    Fluxo:
+    1. Carrega o pipeline serializado (.joblib).
+    2. Carrega os dados de teste processados (X_test, y_test).
+    3. Gera predições e calcula métricas.
+    4. Exibe relatório de classificação e matriz de confusão.
+
+    Métrica de Negócio (KPI):
+    O foco da avaliação é o RECALL da classe positiva (1 - Risco).
+    No contexto da Passos Mágicos, o custo de um Falso Negativo (deixar de identificar
+    um aluno em risco) é muito superior ao de um Falso Positivo (intervir em um aluno
+    que não precisava).
+    """
     root = get_project_root()
     data_dir = root / "data" / "processed"
     model_path = root / "app" / "model" / "pipeline.joblib"

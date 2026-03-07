@@ -5,7 +5,11 @@ from src.feature_engineering import PedraMapper, BinaryCleaner
 
 
 def test_normalize_columns():
-    """Testa a normalização de nomes de colunas (snake_case e acentos)."""
+    """
+    Testa a normalização de nomes de colunas.
+    Objetivo: Garantir padronização (snake_case) e remoção de acentos/espaços
+    para evitar erros de referência no Pandas.
+    """
     df = pd.DataFrame(
         {
             "INDE 22": [1],
@@ -24,7 +28,11 @@ def test_normalize_columns():
 
 
 def test_pedra_mapper():
-    """Testa o Transformer de Pedras isoladamente."""
+    """
+    Testa o Transformer de Pedras isoladamente.
+    Objetivo: Verificar se o mapeamento ordinal (Quartzo=1 ... Topázio=4)
+    está correto e se valores desconhecidos viram 0.
+    """
     df = pd.DataFrame({"pedra_20": ["Ametista", "Quartzo", "Topázio", "Desconhecida"]})
     mapper = PedraMapper()
     df_trans = mapper.transform(df)
@@ -35,7 +43,10 @@ def test_pedra_mapper():
 
 
 def test_binary_cleaner():
-    """Testa o Transformer de Binários isoladamente."""
+    """
+    Testa o Transformer de Binários isoladamente.
+    Objetivo: Garantir que variações de 'Sim'/'Não' sejam unificadas para 1/0.
+    """
     df = pd.DataFrame(
         {
             "indicado_bolsa": ["Sim", "Não", "S", "N"],
@@ -55,9 +66,14 @@ def test_binary_cleaner():
 
 
 def test_create_target():
-    """Testa a criação da variável ALVO e remoção de Data Leakage."""
-    # Defasagem negativa (-1) = Atraso = Alvo 1
-    # Defasagem positiva ou zero = Em dia = Alvo 0
+    """
+    Testa a criação da variável ALVO e a prevenção de Data Leakage.
+
+    Regra:
+    - Defasagem < 0 (ex: -1) -> ALVO = 1 (Risco)
+    - Defasagem >= 0 (ex: 0) -> ALVO = 0 (Sem Risco)
+    - A coluna original 'defas' DEVE ser removida.
+    """
     df = pd.DataFrame({"defas": [-1, 0, -2, 1]})
     df_target = create_target(df)
 
@@ -70,8 +86,9 @@ def test_create_target():
 
 def test_create_target_drops_nan():
     """
-    Testa se linhas com 'defas' nulo são removidas.
-    Requisito de qualidade: Não treinar com target imputado/incerto.
+    Testa o tratamento de dados nulos no Target.
+    Objetivo: Garantir que não treinamos o modelo com targets imputados ou incertos.
+    Linhas com 'defas' nulo devem ser descartadas.
     """
     df = pd.DataFrame({"defas": [-1, 0, np.nan, None, ""]})
 

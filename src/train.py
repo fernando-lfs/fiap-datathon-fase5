@@ -22,7 +22,24 @@ def get_project_root() -> Path:
 
 def create_pipeline(X_train: pd.DataFrame) -> Pipeline:
     """
-    Cria o pipeline completo de ML.
+    Constrói o pipeline completo de processamento e modelagem.
+
+    Estratégia de Pré-processamento:
+    1. Numéricas: Imputação pela mediana (robusto a outliers) + Padronização (StandardScaler).
+    2. Categóricas: Imputação de valor constante + OneHotEncoding.
+    3. Customizados:
+       - PedraMapper: Mapeamento ordinal das pedras (Quartzo < Ágata < Ametista < Topázio).
+       - BinaryCleaner: Padronização de booleanos textuais (Sim/Não).
+
+    Modelo:
+    - LogisticRegression com class_weight='balanced' para lidar com o desbalanceamento
+      natural das classes de risco.
+
+    Args:
+        X_train (pd.DataFrame): DataFrame de treino para inferência de tipos de colunas.
+
+    Returns:
+        Pipeline: Pipeline scikit-learn configurado e pronto para treino.
     """
     # 1. Definição de Grupos de Colunas
     ideal_categorical = ["genero", "instituicao_de_ensino"]
@@ -122,6 +139,15 @@ def create_pipeline(X_train: pd.DataFrame) -> Pipeline:
 
 
 def run_training():
+    """
+    Orquestra o processo de treinamento do modelo.
+
+    Etapas:
+    1. Carrega dados processados (X_train, y_train).
+    2. Instancia o pipeline via create_pipeline().
+    3. Realiza o fit do modelo.
+    4. Serializa o artefato final em app/model/pipeline.joblib.
+    """
     root = get_project_root()
     data_dir = root / "data" / "processed"
     model_dir = root / "app" / "model"

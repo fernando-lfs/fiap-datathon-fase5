@@ -71,12 +71,11 @@ Siga o padrão: `<tipo>: <descrição breve no imperativo>`
 
 Garanta que o pipeline completo funciona localmente e que a qualidade do código foi mantida:
 
-1.  **Pipeline de Dados:** O pré-processamento e a engenharia de features rodam sem erros?
+1.  **Pipeline de Dados:** O pré-processamento roda sem erros e gera os arquivos em `data/processed`?
     ```bash
     python -m src.preprocessing
-    python -m src.feature_engineering
     ```
-2.  **Treino e Avaliação:** O modelo treina e gera métricas honestas (Recall < 100%)?
+2.  **Treino e Avaliação:** O modelo treina, salva o `.joblib` e gera métricas honestas (Recall < 100%)?
     ```bash
     python -m src.train
     python -m src.evaluate
@@ -85,7 +84,9 @@ Garanta que o pipeline completo funciona localmente e que a qualidade do código
     ```bash
     pytest --cov=src --cov=app tests/
     ```
-4.  **Docker:** A imagem constrói sem erros?
+4.  **Docker:** A imagem constrói e sobe sem erros?
     ```bash
     docker build -t passos-magicos-api .
+    # Opcional: Testar se o container responde
+    docker run --rm -p 8000:8000 passos-magicos-api
     ```

@@ -3,6 +3,7 @@ from unittest.mock import patch, MagicMock
 from app.main import app
 
 # Payload de exemplo ajustado ao app/schemas.py
+# Representa um aluno com dados completos para teste de integração da rota
 sample_payload = {
     "genero": "Menina",
     "instituicao_de_ensino": "Escola Pública",
@@ -25,7 +26,10 @@ sample_payload = {
 
 
 def test_health_check():
-    """Testa o endpoint de saúde (/health)."""
+    """
+    Testa o endpoint de saúde (/health).
+    Deve retornar status 200 e indicar que a API está online.
+    """
     with TestClient(app) as client:
         response = client.get("/health")
         assert response.status_code == 200
@@ -35,16 +39,24 @@ def test_health_check():
 
 def test_predict_endpoint_success():
     """
-    Testa o fluxo feliz da predição (Cenário Crítico).
+    Testa o fluxo feliz da predição (Cenário: Risco Crítico).
+
+    Estratégia de Teste (Mocking):
+    Em vez de carregar o modelo real (pesado), "mockamos" (simulamos) o objeto joblib.
+    Isso garante que o teste seja rápido e isole a lógica da API da lógica do modelo.
+
+    Cenário:
+    - Modelo prevê classe 1 (Risco).
+    - Probabilidade simulada de 0.8 (80%).
+    - Resultado esperado: Mensagem de risco "CRÍTICO".
     """
     # Mock do objeto modelo do scikit-learn
     mock_model = MagicMock()
-    mock_model.predict.return_value = [1]  # Simula classe 1 (Risco)
+    mock_model.predict.return_value = [1]
     # Simula probabilidade: [prob_classe_0, prob_classe_1]
-    # 0.8 deve acionar a mensagem "CRÍTICO" na nova lógica
     mock_model.predict_proba.return_value = [[0.2, 0.8]]
 
-    # Patch no joblib.load dentro do namespace de app.main
+    # Patch no joblib.load para injetar nosso mock
     with patch("app.main.joblib.load", return_value=mock_model):
         with TestClient(app) as client:
             response = client.post("/predict", json=sample_payload)
@@ -54,15 +66,20 @@ def test_predict_endpoint_success():
 
             assert data["risco_defasagem"] is True
             assert data["probabilidade_risco"] == 0.8
-            # CORREÇÃO: Agora esperamos "CRÍTICO" para prob >= 0.8
             assert "CRÍTICO" in data["mensagem"]
 
 
 def test_predict_endpoint_no_risk():
-    """Testa predição quando não há risco (Cenário Estável)."""
+    """
+    Testa predição quando não há risco (Cenário: Estável).
+
+    Cenário:
+    - Modelo prevê classe 0 (Sem Risco).
+    - Probabilidade de risco baixa (0.1).
+    - Resultado esperado: Mensagem "ESTÁVEL".
+    """
     mock_model = MagicMock()
     mock_model.predict.return_value = [0]
-    # Probabilidade baixa (0.1) -> Mensagem "ESTÁVEL"
     mock_model.predict_proba.return_value = [[0.9, 0.1]]
 
     with patch("app.main.joblib.load", return_value=mock_model):
@@ -72,24 +89,28 @@ def test_predict_endpoint_no_risk():
             data = response.json()
             assert data["risco_defasagem"] is False
             assert data["probabilidade_risco"] == 0.1
-            # Opcional: Validar mensagem de estabilidade
             assert "ESTÁVEL" in data["mensagem"]
 
 
 def test_predict_validation_error():
-    """Testa envio de dados inválidos (validação Pydantic)."""
+    """
+    Testa a robustez da API contra dados inválidos.
+    O Pydantic deve interceptar o erro antes de chegar ao modelo.
+    """
     invalid_payload = sample_payload.copy()
     # Envia string onde deveria ser float
     invalid_payload["iaa"] = "texto_invalido"
 
     with TestClient(app) as client:
         response = client.post("/predict", json=invalid_payload)
-        assert response.status_code == 422
+        assert response.status_code == 422  # Unprocessable Entity
 
 
 def test_model_info_endpoint():
-    """Testa o novo endpoint de metadados."""
-    # Precisamos mockar o modelo carregado para o endpoint funcionar
+    """
+    Testa o endpoint de metadados (/model/info).
+    Verifica se as informações de versão e features estão presentes.
+    """
     with patch("app.main.model", MagicMock()):
         with TestClient(app) as client:
             response = client.get("/model/info")

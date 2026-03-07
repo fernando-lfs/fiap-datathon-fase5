@@ -34,12 +34,13 @@ A arquitetura implementa um pipeline robusto de classificação, desde a engenha
 | **Pipeline** | **Scikit-Learn Pipeline** | Garante que o pré-processamento (imputação, scaling, one-hot encoding) aplicado no treino seja idêntico na inferência, eliminando erros de transformação. |
 | **API** | **FastAPI** | Performance assíncrona e geração automática de documentação (Swagger UI), essencial para consumo por outros sistemas da ONG. |
 | **Feature Eng.** | **Transformers Customizados** | Criação de classes como `PedraMapper` para tratar a ordinalidade das classificações (Quartzo < Ágata < Ametista < Topázio) sem perder a hierarquia. |
+| **Estratégia de Dados** | **Foco no Dataset Principal** | Durante o *Data Understanding*, optou-se por não utilizar arquivos do diretório "Bases Antigas", interpretando-os como legados/depreciados. A prioridade foi garantir a integridade dos dados (consistência 2020-2022) e a robustez da arquitetura MLOps, em vez de aumentar a complexidade de engenharia de dados com fontes não-padronizadas. |
 
 ---
 
 ## 📘 Conexão com o Negócio (PEDE)
 
-A seleção de variáveis do modelo não foi aleatória; ela reflete os insights dos **Relatórios PEDE (2020-2022)** da Associação Passos Mágicos:
+A seleção de variáveis do modelo não foi aleatória; ela reflete os insights dos **Relatórios PEDE (2020-2022)** contidos no dataset principal consolidado da Associação Passos Mágicos:
 
 1.  **IEG (Indicador de Engajamento):** Priorizado como feature chave, pois o relatório de 2022 aponta o engajamento (entrega de lições, participação) como o "termômetro" mais sensível para prever a queda de desempenho acadêmico.
 2.  **Histórico de Pedras:** A evolução da classificação (ex: queda de Ametista para Ágata) foi modelada para capturar tendências de longo prazo, alinhando-se à visão longitudinal da ONG.
@@ -52,6 +53,7 @@ A seleção de variáveis do modelo não foi aleatória; ela reflete os insights
 ### Pré-requisitos
 *   **Docker** (Recomendado para execução isolada).
 *   **Python 3.11+** e **Poetry** (Para desenvolvimento local).
+*   Arquivo `.env` na raiz (opcional, ver `app/config.py` para defaults).
 
 ### 1. Clonar o Repositório
 O primeiro passo é obter o código-fonte em sua máquina local.
@@ -81,32 +83,30 @@ Recomendado se você deseja rodar o pipeline de treinamento passo a passo.
 
 **Passo 1: Instalar Dependências**
 ```bash
-# Se estiver usando Poetry (Recomendado)
+# Instala as dependências definidas no pyproject.toml
 poetry install
-poetry shell
-
-# OU via pip tradicional
-pip install -r requirements.txt
 ```
 
 **Passo 2: Executar o Pipeline de Dados e Treino**
-Siga a ordem lógica dos scripts para reproduzir o ciclo de vida do modelo:
+Utilize o comando `poetry run` para garantir a execução dentro do ambiente virtual isolado:
 
 ```bash
 # 1. Pré-processamento -> Gera data/processed/*.csv
-python -m src.preprocessing
+poetry run python -m src.preprocessing
 
 # 2. Treinamento -> Gera app/model/pipeline.joblib
-python -m src.train
+poetry run python -m src.train
 
 # 3. Avaliação -> Exibe métricas no console
-python -m src.evaluate
+poetry run python -m src.evaluate
 ```
 
 **Passo 3: Iniciar a API**
 ```bash
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+poetry run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
+
+> **Dica:** Caso prefira ativar o shell manualmente (sem usar `poetry run` repetidamente), ative o ambiente virtual criado pelo Poetry (ex: `.venv\Scripts\activate` no Windows ou `source .venv/bin/activate` no Linux/Mac).
 
 ---
 
@@ -153,7 +153,7 @@ Recebe indicadores acadêmicos e psicossociais dos anos anteriores para prever o
 ```json
 {
   "risco_defasagem": true,
-  "probabilidade_risco": 0.7845,
+  "probabilidade_risco": 0.8245,
   "mensagem": "CRÍTICO: Risco muito alto de defasagem. Intervenção pedagógica imediata recomendada."
 }
 ```
@@ -187,14 +187,17 @@ project-root/
 
 ## 📈 Resultados Obtidos
 
-O modelo Baseline (Regressão Logística) foi otimizado para maximizar a detecção de alunos em situação de vulnerabilidade educacional.
+## 📈 Resultados Obtidos (Baseline)
 
-| Métrica | Valor Aprox. | Descrição |
+Os resultados abaixo refletem o **Baseline** do projeto (Regressão Logística). Diferente de abordagens que utilizam dados do futuro (notas de 2022) para inflar métricas artificialmente, este projeto priorizou a **prevenção rigorosa de Data Leakage**, utilizando apenas o histórico (2020-2021) para prever o risco em 2022.
+
+| Métrica | Valor (Teste) | Análise de Negócio |
 | :--- | :--- | :--- |
-| **Recall (Risco)** | **~92%** | Capacidade do modelo de identificar corretamente os alunos que realmente terão defasagem. |
-| **Acurácia** | **~94%** | Taxa global de acertos do modelo. |
+| **Recall (Classe de Risco)** | **67%** | **KPI Principal:** O modelo identifica corretamente 2 em cada 3 alunos que realmente precisam de ajuda. No contexto social, priorizamos minimizar os Falsos Negativos (alunos deixados para trás). |
+| **Precision (Classe de Risco)** | **74%** | Quando o modelo alerta para risco, ele está correto em 74% das vezes, garantindo que a equipe pedagógica não desperdice recursos excessivos com alarmes falsos. |
+| **Acurácia Global** | **60%** | A métrica reflete a dificuldade de separar classes linearmente apenas com dados históricos. É o ponto de partida ideal para futuras iterações com modelos não-lineares (ex: XGBoost). |
 
-> **Nota de Negócio:** O foco em Recall garante que a Associação Passos Mágicos atue preventivamente na maioria dos casos críticos, cumprindo sua missão social de não deixar nenhum aluno para trás.
+> **Nota Técnica:** O *trade-off* atual favorece o Recall da classe de risco (1), alinhado à missão da Associação Passos Mágicos de atuar preventivamente.
 
 ---
 

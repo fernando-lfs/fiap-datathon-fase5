@@ -106,7 +106,18 @@ def load_dataset(file_path: Path) -> pd.DataFrame:
 
 def create_target(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Cria a variável alvo 'ALVO' baseada na coluna 'defas' e REMOVE a origem.
+    Cria a variável alvo 'ALVO' baseada na coluna 'defas' (Defasagem).
+
+    Regra de Negócio (Baseada no IAN - Indicador de Adequação de Nível):
+    - Defasagem < 0: Indica atraso escolar (Fase Efetiva < Fase Ideal).
+      -> ALVO = 1 (Risco de Defasagem/Evasão).
+    - Defasagem >= 0: Indica aluno em dia ou adiantado.
+      -> ALVO = 0 (Sem Risco Imediato).
+
+    Ação de MLOps:
+    - Remove a coluna original 'defas' para evitar Data Leakage, pois ela
+      é a resposta direta da predição.
+    - Remove linhas com 'defas' nulo para garantir integridade do treino.
     """
     if "defas" not in df.columns:
         raise ValueError("Coluna 'defas' necessária para criar o target.")
@@ -137,7 +148,8 @@ def create_target(df: pd.DataFrame) -> pd.DataFrame:
 
 def save_split_data(df: pd.DataFrame, data_dir: Path):
     """
-    Divide o dataset em Treino e Teste e salva em data/processed.
+    Divide o dataset em Treino (80%) e Teste (20%) e salva em data/processed.
+    Utiliza estratificação pelo ALVO para manter a proporção de classes.
     """
     logger.info("Iniciando divisão de dados (Split)...")
 

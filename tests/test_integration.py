@@ -1,6 +1,5 @@
 import pandas as pd
 import pytest
-import shutil
 from pathlib import Path
 
 # Imports dos módulos do projeto
@@ -12,8 +11,12 @@ import src.evaluate
 @pytest.fixture
 def mock_project_root(tmp_path, monkeypatch):
     """
-    Fixture que redireciona o 'get_project_root' e caminhos fixos
-    para um diretório temporário durante os testes.
+    Fixture de isolamento de ambiente.
+
+    Objetivo:
+    Redireciona as operações de arquivo para um diretório temporário (`tmp_path`),
+    garantindo que o teste de integração não suje a pasta real `data/` ou `app/model`
+    do projeto, nem sobrescreva o modelo de produção.
     """
     # Cria estrutura de pastas no diretório temporário
     d = tmp_path
@@ -26,7 +29,7 @@ def mock_project_root(tmp_path, monkeypatch):
     def mock_return():
         return d
 
-    # Aplica o monkeypatch nas funções que definem caminhos
+    # Aplica o monkeypatch nas funções que definem caminhos absolutos
     monkeypatch.setattr(src.train, "get_project_root", mock_return)
     monkeypatch.setattr(src.evaluate, "get_project_root", mock_return)
 
@@ -35,11 +38,18 @@ def mock_project_root(tmp_path, monkeypatch):
 
 def test_full_pipeline_execution(mock_project_root):
     """
-    Teste de Integração (Smoke Test):
-    1. Cria CSV Raw dummy.
-    2. Executa Preprocessing (Load -> Target -> Split).
-    3. Executa Training (Train -> Save Model).
-    4. Executa Evaluate (Load Model -> Predict).
+    Teste de Integração End-to-End (Smoke Test).
+
+    Cenário:
+    Simula o ciclo de vida completo do MLOps em um ambiente controlado:
+    1. Ingestão (Criação de CSV Raw dummy).
+    2. Processamento (Limpeza, Feature Engineering, Split).
+    3. Treinamento (Fit do modelo, Serialização .joblib).
+    4. Avaliação (Carga do modelo, Predição em lote).
+
+    Critério de Sucesso:
+    O pipeline deve rodar do início ao fim sem lançar exceções, gerando
+    os artefatos esperados (arquivos csv e joblib).
     """
     root = mock_project_root
     raw_file = root / "data" / "raw" / "dataset_pede_passos.csv"
@@ -99,7 +109,7 @@ def test_full_pipeline_execution(mock_project_root):
 
     # 4. EXECUÇÃO DA AVALIAÇÃO
     try:
-        # Apenas executa para garantir que não quebra
+        # Apenas executa para garantir que não quebra (Smoke Test)
         src.evaluate.evaluate_model()
     except Exception as e:
         pytest.fail(f"Falha no Evaluate: {e}")
