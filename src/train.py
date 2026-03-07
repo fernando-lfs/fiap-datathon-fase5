@@ -26,30 +26,30 @@ def create_pipeline(X_train: pd.DataFrame) -> Pipeline:
     """
     # 1. Definição de Grupos de Colunas
     ideal_categorical = ["genero", "instituicao_de_ensino"]
-
-    # Removemos 'pedra_22' pois é futuro/resultado em relação ao histórico
     ideal_pedra = ["pedra_20", "pedra_21"]
-
     ideal_binary = ["indicado", "atingiu_pv", "indicado_bolsa", "ponto_virada"]
 
     # ==============================================================================
-    # PREVENÇÃO DE DATA LEAKAGE (CORRIGIDO)
+    # PREVENÇÃO DE DATA LEAKAGE (ATUALIZADO)
     # ==============================================================================
-    # Estas colunas são resultados de 2022 ou proxies diretos do alvo.
-    # O modelo deve prever o risco baseado no histórico (2020/2021) e notas parciais.
     forbidden_cols = [
         "ra",
         "nome",
         "turma",
         "alvo",  # Identificadores
-        "ian",  # VAZAMENTO: Proxy direto da defasagem
-        "fase_ideal",  # VAZAMENTO: Usado no cálculo da defasagem
-        "defas",  # VAZAMENTO: Variável original do alvo
-        "inde_22",  # VAZAMENTO: Resultado final consolidado de 2022
+        "ian",
+        "fase_ideal",
+        "defas",  # Proxies diretos do alvo
+        "inde_22",
         "cg",
         "cf",
-        "ct",  # VAZAMENTO: Rankings baseados no desempenho de 2022
-        "pedra_22",  # VAZAMENTO: Classificação final de 2022
+        "ct",
+        "pedra_22",  # Resultados futuros
+        # NOVAS REMOÇÕES: Variáveis estruturais que enviesam o modelo
+        "fase",
+        "idade_22",
+        "ano_nasc",
+        "ano_ingresso",
     ]
 
     # Seleção dinâmica de colunas presentes no DataFrame
@@ -57,7 +57,7 @@ def create_pipeline(X_train: pd.DataFrame) -> Pipeline:
     cols_pedra = [c for c in ideal_pedra if c in X_train.columns]
     cols_binary = [c for c in ideal_binary if c in X_train.columns]
 
-    # Numéricas: Tudo que sobra, exceto as proibidas e as já selecionadas acima
+    # Numéricas: Tudo que sobra, exceto as proibidas e as já selecionadas
     exclude_cols = cols_categorical + cols_pedra + cols_binary + forbidden_cols
 
     cols_numerical = [
@@ -68,7 +68,7 @@ def create_pipeline(X_train: pd.DataFrame) -> Pipeline:
 
     logger.info(f"Features Numéricas selecionadas: {len(cols_numerical)}")
     logger.info(f"Features Categóricas selecionadas: {len(cols_categorical)}")
-    logger.debug(f"Colunas excluídas (Forbidden/Outras): {exclude_cols}")
+    logger.debug(f"Colunas excluídas: {exclude_cols}")
 
     # 2. Pipelines de Transformação
     numeric_transformer = Pipeline(
@@ -85,7 +85,6 @@ def create_pipeline(X_train: pd.DataFrame) -> Pipeline:
         ]
     )
 
-    # Para colunas que viram números via PedraMapper/BinaryCleaner
     generated_numeric_transformer = Pipeline(
         steps=[
             ("imputer", SimpleImputer(strategy="median")),
@@ -94,26 +93,22 @@ def create_pipeline(X_train: pd.DataFrame) -> Pipeline:
     )
 
     # 3. ColumnTransformer
-    # O ColumnTransformer vai buscar as colunas pelos nomes definidos nas listas acima.
     preprocessor = ColumnTransformer(
         transformers=[
             ("num", numeric_transformer, cols_numerical),
             ("cat", categorical_transformer, cols_categorical),
             ("gen_num", generated_numeric_transformer, cols_pedra + cols_binary),
         ],
-        remainder="drop",  # Descarta explicitamente as colunas forbidden
+        remainder="drop",
         verbose_feature_names_out=False,
     )
 
     # 4. Pipeline Final
     model_pipeline = Pipeline(
         steps=[
-            # Passos de Engenharia de Features (aplicados no DF inteiro antes do split de colunas)
             ("pedra_mapper", PedraMapper()),
             ("binary_cleaner", BinaryCleaner()),
-            # Pré-processamento (Split + Scaling + Encoding)
             ("preprocessor", preprocessor),
-            # Modelo
             (
                 "classifier",
                 LogisticRegression(
@@ -134,7 +129,6 @@ def run_training():
     logger.info("Iniciando processo de treinamento...")
 
     try:
-        # Carrega CSVs processados
         X_train = pd.read_csv(data_dir / "X_train.csv")
         y_train_df = pd.read_csv(data_dir / "y_train.csv")
         y_train = y_train_df.values.ravel()

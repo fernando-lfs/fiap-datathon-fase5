@@ -2,6 +2,7 @@ import pandas as pd
 import joblib
 import logging
 import sklearn
+import warnings  # <--- NOVO IMPORT
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import RedirectResponse
 from contextlib import asynccontextmanager
@@ -12,14 +13,18 @@ from src.utils import setup_logger
 # IMPORTANTE: Necessário para o joblib reconstruir o pipeline corretamente
 from src.feature_engineering import PedraMapper, BinaryCleaner  # noqa: F401
 
+# 1. Configuração de Silenciamento de Warnings (Polimento de Logs)
+# Ignora avisos de feature names do sklearn, pois garantimos a ordem via Pydantic
+warnings.filterwarnings("ignore", category=UserWarning, module="sklearn")
+
 # Garante output pandas também na inferência
 sklearn.set_config(transform_output="pandas")
 
-# 1. Configuração de Logs da Aplicação
+# Configuração de Logs da Aplicação
 app_logger = setup_logger("api", "api.log", level=settings.LOG_LEVEL)
 
 
-# 2. Configuração do Logger de Drift (Isolado)
+# Configuração do Logger de Drift (Isolado)
 def get_drift_logger():
     """Configura logger específico para monitoramento de dados (Drift)."""
     logger = logging.getLogger("drift_monitor")
@@ -76,16 +81,12 @@ def prepare_input_dataframe(data: AlunoInput) -> pd.DataFrame:
     input_dict = data.model_dump()
     df = pd.DataFrame([input_dict])
 
-    # Adiciona apenas colunas auxiliares que podem ser esperadas por transformers
-    # genéricos ou logs, mas que não afetam a predição se o pipeline estiver correto.
-    # O ColumnTransformer com remainder='drop' cuidará de ignorar o que não for usado.
+    # Injetamos apenas colunas estruturais necessárias
     defaults = {
         "ra": "API_REQ",
         "nome": "API_REQ",
         "turma": "API",
-        "fase": 0,
-        "ano_nasc": 0,
-        "ano_ingresso": 2022,
+        "n_av": 0,
     }
 
     for col, val in defaults.items():
@@ -93,6 +94,25 @@ def prepare_input_dataframe(data: AlunoInput) -> pd.DataFrame:
             df[col] = val
 
     return df
+
+
+@app.get("/model/info", tags=["Metadados"])
+def get_model_info():
+    """Retorna metadados sobre o modelo em produção."""
+    if not model:
+        raise HTTPException(status_code=503, detail="Modelo indisponível.")
+
+    return {
+        "nome_projeto": settings.PROJECT_NAME,
+        "versao_api": settings.VERSION,
+        "tipo_modelo": "Pipeline Scikit-Learn (Logistic Regression)",
+        "status": "Ativo",
+        "features_principais": [
+            "Indicadores Psicossociais (IEG, IAA, IPS)",
+            "Histórico de Classificação (Pedras)",
+            "Notas Acadêmicas (Matemática, Português)",
+        ],
+    }
 
 
 @app.post("/predict", response_model=PredicaoOutput, tags=["Predição"])
@@ -119,19 +139,26 @@ def predict(aluno: AlunoInput):
             proba = 1.0 if prediction == 1 else 0.0
 
         risco = bool(prediction == 1)
-        mensagem = (
-            "ALERTA: Alto risco de defasagem. Intervenção pedagógica recomendada."
-            if risco
-            else "Aluno com bom desempenho. Manter acompanhamento padrão."
-        )
+
+        # Lógica Pedagógica de Resposta
+        if proba >= 0.8:
+            mensagem = "CRÍTICO: Risco muito alto de defasagem. Intervenção pedagógica imediata recomendada."
+        elif proba >= 0.6:
+            mensagem = (
+                "ALERTA: Alto risco de defasagem. Acompanhamento próximo sugerido."
+            )
+        elif proba >= 0.5:
+            mensagem = "ATENÇÃO: Risco moderado. Monitorar indicadores de engajamento."
+        else:
+            mensagem = (
+                "ESTÁVEL: Aluno com bom prognóstico. Manter acompanhamento padrão."
+            )
 
         # 3. Log para Monitoramento de Drift
         try:
-            # Logamos features chave para monitorar mudanças na distribuição
             log_msg = f"{proba:.4f},{risco},{aluno.genero},{aluno.instituicao_de_ensino},{aluno.pedra_20}"
             drift_logger.info(log_msg)
         except Exception as e:
-            # Falha no log não deve parar a API
             app_logger.error(f"Falha não-bloqueante ao registrar log de drift: {e}")
 
         return PredicaoOutput(
@@ -141,7 +168,6 @@ def predict(aluno: AlunoInput):
         )
 
     except ValueError as ve:
-        # Erros de validação do Scikit-Learn (ex: categoria nova desconhecida)
         app_logger.error(f"Erro de validação do modelo: {ve}")
         raise HTTPException(
             status_code=422,

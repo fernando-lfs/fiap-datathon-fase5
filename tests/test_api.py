@@ -35,13 +35,13 @@ def test_health_check():
 
 def test_predict_endpoint_success():
     """
-    Testa o fluxo feliz da predição.
-    Utiliza patch no local exato onde o joblib é importado em app.main.
+    Testa o fluxo feliz da predição (Cenário Crítico).
     """
     # Mock do objeto modelo do scikit-learn
     mock_model = MagicMock()
     mock_model.predict.return_value = [1]  # Simula classe 1 (Risco)
     # Simula probabilidade: [prob_classe_0, prob_classe_1]
+    # 0.8 deve acionar a mensagem "CRÍTICO" na nova lógica
     mock_model.predict_proba.return_value = [[0.2, 0.8]]
 
     # Patch no joblib.load dentro do namespace de app.main
@@ -54,13 +54,15 @@ def test_predict_endpoint_success():
 
             assert data["risco_defasagem"] is True
             assert data["probabilidade_risco"] == 0.8
-            assert "ALERTA" in data["mensagem"]
+            # CORREÇÃO: Agora esperamos "CRÍTICO" para prob >= 0.8
+            assert "CRÍTICO" in data["mensagem"]
 
 
 def test_predict_endpoint_no_risk():
-    """Testa predição quando não há risco."""
+    """Testa predição quando não há risco (Cenário Estável)."""
     mock_model = MagicMock()
     mock_model.predict.return_value = [0]
+    # Probabilidade baixa (0.1) -> Mensagem "ESTÁVEL"
     mock_model.predict_proba.return_value = [[0.9, 0.1]]
 
     with patch("app.main.joblib.load", return_value=mock_model):
@@ -70,6 +72,8 @@ def test_predict_endpoint_no_risk():
             data = response.json()
             assert data["risco_defasagem"] is False
             assert data["probabilidade_risco"] == 0.1
+            # Opcional: Validar mensagem de estabilidade
+            assert "ESTÁVEL" in data["mensagem"]
 
 
 def test_predict_validation_error():
@@ -81,3 +85,15 @@ def test_predict_validation_error():
     with TestClient(app) as client:
         response = client.post("/predict", json=invalid_payload)
         assert response.status_code == 422
+
+
+def test_model_info_endpoint():
+    """Testa o novo endpoint de metadados."""
+    # Precisamos mockar o modelo carregado para o endpoint funcionar
+    with patch("app.main.model", MagicMock()):
+        with TestClient(app) as client:
+            response = client.get("/model/info")
+            assert response.status_code == 200
+            data = response.json()
+            assert "nome_projeto" in data
+            assert "features_principais" in data

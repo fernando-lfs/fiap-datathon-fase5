@@ -16,30 +16,29 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PYTHONPATH=/app
 
-# Instala dependências do sistema necessárias para compilação
+# 1. Instala dependências do sistema necessárias para compilação
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     python3-dev \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Instalação de dependências Python
+# 2. Cria usuário não-root (appuser) ANTES de copiar arquivos
+RUN adduser --disabled-password --gecos "" appuser
+
+# 3. Instalação de dependências Python
 COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
-# Copia o código fonte
-COPY app/ ./app/
-COPY src/ ./src/
+# 4. Copia o código fonte JÁ com as permissões corretas
+COPY --chown=appuser:appuser app/ ./app/
+COPY --chown=appuser:appuser src/ ./src/
 
-# Configuração de Permissões e Segurança
-# 1. Cria usuário não-root (appuser) para não rodar a aplicação como root
-# 2. Cria diretório de logs
-# 3. Ajusta permissões recursivamente
-RUN adduser --disabled-password --gecos "" appuser && \
-    mkdir -p logs && \
-    chown -R appuser:appuser /app
-# Muda para o usuário seguro
+# 5. Cria diretório de logs e ajusta permissão
+RUN mkdir -p logs && chown -R appuser:appuser logs
+
+# 6. Muda para o usuário seguro
 USER appuser
 
 # Expõe a porta padrão da API
