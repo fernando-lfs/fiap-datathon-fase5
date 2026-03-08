@@ -14,7 +14,7 @@ A arquitetura implementa um pipeline robusto de classificação, desde a engenha
 
 ---
 
-## 🚀 Funcionalidades e Diferenciais
+## 🚀 Destaques Técnicos e Funcionalidades
 
 *   **Pipeline Anti-Leakage:** Estratégia rigorosa de engenharia de features que remove variáveis do ano corrente (2022) para evitar vazamento de dados, garantindo que o modelo aprenda apenas com o histórico (2020-2021).
 *   **Monitoramento de Drift:** Implementação de logs dedicados (`drift_data.csv`) na API para monitorar as entradas em produção, facilitando a detecção de mudanças no perfil dos alunos.
@@ -38,13 +38,24 @@ A arquitetura implementa um pipeline robusto de classificação, desde a engenha
 
 ---
 
-## 📘 Conexão com o Negócio (PEDE)
+## 🔄 Etapas do Pipeline de Machine Learning
 
-A seleção de variáveis do modelo não foi aleatória; ela reflete os insights dos **Relatórios PEDE (2020-2022)** contidos no dataset principal consolidado da Associação Passos Mágicos:
+O projeto segue um fluxo linear e modularizado, conforme exigido nas boas práticas de MLOps:
 
-1.  **IEG (Indicador de Engajamento):** Priorizado como feature chave, pois o relatório de 2022 aponta o engajamento (entrega de lições, participação) como o "termômetro" mais sensível para prever a queda de desempenho acadêmico.
-2.  **Histórico de Pedras:** A evolução da classificação (ex: queda de Ametista para Ágata) foi modelada para capturar tendências de longo prazo, alinhando-se à visão longitudinal da ONG.
-3.  **Indicadores Psicossociais (IPS/IPP):** Incluídos para garantir que o modelo considere não apenas notas, mas o bem-estar emocional do aluno, respeitando a abordagem holística da Passos Mágicos.
+1.  **Pré-processamento (`src/preprocessing.py`):**
+    *   Limpeza de nomes de colunas (snake_case).
+    *   Conversão de tipos numéricos (PT-BR para float).
+    *   Criação do Target (`ALVO`) baseado na defasagem escolar (IAN).
+    *   Split de dados com estratificação.
+2.  **Engenharia de Features (`src/feature_engineering.py`):**
+    *   Mapeamento ordinal de Pedras.
+    *   Binarização de variáveis categóricas (Sim/Não).
+3.  **Treinamento (`src/train.py`):**
+    *   Imputação de valores nulos (Mediana para numéricos, Constante para categóricos).
+    *   Padronização (StandardScaler) e OneHotEncoding.
+    *   Treinamento do modelo Logistic Regression com balanceamento de classes.
+4.  **Avaliação (`src/evaluate.py`):**
+    *   Cálculo de métricas (Recall, Precision, Acurácia) no conjunto de teste.
 
 ---
 
@@ -153,7 +164,7 @@ Recebe indicadores acadêmicos e psicossociais dos anos anteriores para prever o
 ```json
 {
   "risco_defasagem": true,
-  "probabilidade_risco": 0.8245,
+  "probabilidade_risco": 0.8745,
   "mensagem": "CRÍTICO: Risco muito alto de defasagem. Intervenção pedagógica imediata recomendada."
 }
 ```
@@ -185,19 +196,32 @@ project-root/
 
 ---
 
-## 📈 Resultados Obtidos
+## 📈 Performance e Calibração Operacional
 
-## 📈 Resultados Obtidos (Baseline)
+Para garantir que a solução técnica atenda às necessidades pedagógicas da ONG, a avaliação foi dividida em duas camadas: a performance bruta do modelo estatístico e a calibração dos alertas na API.
 
-Os resultados abaixo refletem o **Baseline** do projeto (Regressão Logística). Diferente de abordagens que utilizam dados do futuro (notas de 2022) para inflar métricas artificialmente, este projeto priorizou a **prevenção rigorosa de Data Leakage**, utilizando apenas o histórico (2020-2021) para prever o risco em 2022.
+### 1. Performance do Modelo (Baseline Offline)
+As métricas abaixo refletem a capacidade pura do algoritmo (Regressão Logística) em distinguir padrões de risco no conjunto de teste, utilizando o limiar de decisão padrão (0.5).
 
-| Métrica | Valor (Teste) | Análise de Negócio |
+| Métrica | Valor | Interpretação Técnica |
 | :--- | :--- | :--- |
-| **Recall (Classe de Risco)** | **67%** | **KPI Principal:** O modelo identifica corretamente 2 em cada 3 alunos que realmente precisam de ajuda. No contexto social, priorizamos minimizar os Falsos Negativos (alunos deixados para trás). |
-| **Precision (Classe de Risco)** | **74%** | Quando o modelo alerta para risco, ele está correto em 74% das vezes, garantindo que a equipe pedagógica não desperdice recursos excessivos com alarmes falsos. |
-| **Acurácia Global** | **60%** | A métrica reflete a dificuldade de separar classes linearmente apenas com dados históricos. É o ponto de partida ideal para futuras iterações com modelos não-lineares (ex: XGBoost). |
+| **Recall (Sensibilidade)** | **67%** | Capacidade do modelo de detectar alunos vulneráveis. De cada 100 alunos em risco real, o modelo identifica 67. |
+| **Precision** | **74%** | Confiabilidade do alerta. Quando o modelo diz que há risco, ele acerta em 74% dos casos. |
+| **Acurácia** | **60%** | Taxa global de acertos, considerando o desafio de separar classes com dados puramente históricos. |
 
-> **Nota Técnica:** O *trade-off* atual favorece o Recall da classe de risco (1), alinhado à missão da Associação Passos Mágicos de atuar preventivamente.
+### 2. Estratégia de Decisão em Produção (Online)
+Observou-se que o modelo tende a ser conservador (probabilidades altas). Para evitar a "fadiga de alertas" e direcionar a equipe pedagógica apenas para os casos mais urgentes, implementamos uma **camada de decisão na API** com limiares ajustados (Threshold Tuning).
+
+Isso significa que a API sacrifica parte do Recall (cobertura) para maximizar a **Precisão** nos níveis críticos.
+
+| Nível de Alerta | Probabilidade (Score) | Ação Recomendada (API) |
+| :--- | :--- | :--- |
+| 🔴 **CRÍTICO** | **≥ 85%** | **Intervenção Imediata.** O modelo tem altíssima certeza do risco. |
+| 🟠 **ALERTA** | **80% - 84%** | **Acompanhamento Próximo.** Risco elevado, requer atenção individual. |
+| 🟡 **ATENÇÃO** | **75% - 79%** | **Monitoramento.** Aluno na zona de risco, observar engajamento. |
+| 🟢 **ESTÁVEL** | **< 75%** | **Manutenção.** Prognóstico positivo, seguir fluxo padrão. |
+
+> **Conclusão:** Enquanto o modelo matemático detecta padrões gerais, a API refina esses dados para garantir que o alerta "CRÍTICO" seja disparado apenas quando a probabilidade de defasagem for extrema.
 
 ---
 

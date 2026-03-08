@@ -174,10 +174,10 @@ def get_model_info():
 
     | Probabilidade | Classificação | Ação Recomendada |
     | :--- | :--- | :--- |
-    | ≥ 0.80 | 🔴 CRÍTICO | Intervenção pedagógica imediata. Risco altíssimo. |
-    | ≥ 0.60 | 🟠 ALERTA | Acompanhamento próximo. Alto risco. |
-    | ≥ 0.50 | 🟡 ATENÇÃO | Monitorar indicadores de engajamento. Risco moderado. |
-    | < 0.50 | 🟢 ESTÁVEL | Manter acompanhamento padrão. Baixo risco. |
+    | ≥ 0.85 | 🔴 CRÍTICO | Intervenção pedagógica imediata. Risco altíssimo. |
+    | ≥ 0.80 | 🟠 ALERTA | Acompanhamento próximo. Alto risco. |
+    | ≥ 0.75 | 🟡 ATENÇÃO | Monitorar indicadores de engajamento. Risco moderado. |
+    | < 0.75 | 🟢 ESTÁVEL | Manter acompanhamento padrão. Baixo risco. |
     """,
     responses={
         200: {
@@ -205,10 +205,10 @@ def predict(aluno: AlunoInput):
     Realiza a predição de risco de defasagem escolar.
 
     Regras de Negócio para Mensagens:
-    - Probabilidade >= 0.8: Risco CRÍTICO (Intervenção imediata).
-    - Probabilidade >= 0.6: ALERTA (Alto risco).
-    - Probabilidade >= 0.5: ATENÇÃO (Risco moderado).
-    - Probabilidade < 0.5: ESTÁVEL (Baixo risco).
+    - Probabilidade >= 0.85: Risco CRÍTICO (Intervenção imediata).
+    - Probabilidade >= 0.80: ALERTA (Alto risco).
+    - Probabilidade >= 0.75: ATENÇÃO (Risco moderado).
+    - Probabilidade < 0.75: ESTÁVEL (Baixo risco).
 
     Registra logs de inferência para monitoramento de Data Drift em logs/drift_data.csv.
     """
@@ -236,13 +236,13 @@ def predict(aluno: AlunoInput):
         risco = bool(prediction == 1)
 
         # Lógica Pedagógica de Resposta
-        if proba >= 0.8:
+        if proba >= 0.85:
             mensagem = "CRÍTICO: Risco muito alto de defasagem. Intervenção pedagógica imediata recomendada."
-        elif proba >= 0.6:
+        elif proba >= 0.80:
             mensagem = (
                 "ALERTA: Alto risco de defasagem. Acompanhamento próximo sugerido."
             )
-        elif proba >= 0.5:
+        elif proba >= 0.75:
             mensagem = "ATENÇÃO: Risco moderado. Monitorar indicadores de engajamento."
         else:
             mensagem = (
