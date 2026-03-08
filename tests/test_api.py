@@ -47,14 +47,14 @@ def test_predict_endpoint_success():
 
     Cenário:
     - Modelo prevê classe 1 (Risco).
-    - Probabilidade simulada de 0.8 (80%).
-    - Resultado esperado: Mensagem de risco "CRÍTICO".
+    - Probabilidade simulada de 0.9 (90%).
+    - Resultado esperado: Mensagem de risco "CRÍTICO" (Threshold >= 0.85).
     """
     # Mock do objeto modelo do scikit-learn
     mock_model = MagicMock()
     mock_model.predict.return_value = [1]
     # Simula probabilidade: [prob_classe_0, prob_classe_1]
-    mock_model.predict_proba.return_value = [[0.2, 0.8]]
+    mock_model.predict_proba.return_value = [[0.1, 0.9]]
 
     # Patch no joblib.load para injetar nosso mock
     with patch("app.main.joblib.load", return_value=mock_model):
@@ -65,7 +65,7 @@ def test_predict_endpoint_success():
             data = response.json()
 
             assert data["risco_defasagem"] is True
-            assert data["probabilidade_risco"] == 0.8
+            assert data["probabilidade_risco"] == 0.9
             assert "CRÍTICO" in data["mensagem"]
 
 
